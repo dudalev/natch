@@ -7,6 +7,7 @@
 #include <clickhouse/columns/uuid.h>
 #include <clickhouse/columns/decimal.h>
 #include <clickhouse/columns/nullable.h>
+#include <clickhouse/columns/array.h>
 #include <string>
 #include <memory>
 #include <stdexcept>
@@ -505,3 +506,59 @@ fine::Atom column_uuid_append_bulk(
   }
 }
 FINE_NIF(column_uuid_append_bulk, 0);
+
+// ============================================================================
+// Array Column Support
+// ============================================================================
+
+// Append pre-built nested column to array
+// Works for ANY nested column type (Date, UUID, Nullable(T), Array(T), etc.)
+// Supports arbitrary nesting: Array(Array(Array(T))) works via recursion
+fine::Atom column_array_append_from_column(
+    ErlNifEnv *env,
+    fine::ResourcePtr<ColumnResource> array_col_res,
+    fine::ResourcePtr<ColumnResource> nested_col_res,
+    std::vector<uint64_t> offsets) {
+  try {
+    if (!array_col_res->ptr) {
+      throw std::runtime_error("Array column pointer is null");
+    }
+    if (!nested_col_res->ptr) {
+      throw std::runtime_error("Nested column pointer is null");
+    }
+
+    auto array_col = std::static_pointer_cast<ColumnArray>(array_col_res->ptr);
+    if (!array_col) {
+      throw std::runtime_error("Failed to cast to ColumnArray");
+    }
+
+    ColumnRef nested_col = nested_col_res->ptr;
+    size_t nested_size = nested_col->Size();
+
+    size_t prev = 0;
+    for (size_t offset : offsets) {
+      if (offset < prev) {
+        throw std::runtime_error("Offsets must be monotonically increasing");
+      }
+      if (offset > nested_size) {
+        throw std::runtime_error("Offset " + std::to_string(offset) + " exceeds nested column size " + std::to_string(nested_size));
+      }
+
+      size_t count = offset - prev;
+
+      // Slice nested column and append to array
+      // This is type-agnostic - works for ANY column type!
+      auto slice = nested_col->Slice(prev, count);
+      if (!slice) {
+        throw std::runtime_error("Slice returned null pointer");
+      }
+
+      array_col->AppendAsColumn(slice);
+      prev = offset;
+    }
+    return fine::Atom("ok");
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("Array generic append failed: ") + e.what());
+  }
+}
+FINE_NIF(column_array_append_from_column, 0);

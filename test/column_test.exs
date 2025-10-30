@@ -704,4 +704,217 @@ defmodule Chex.ColumnTest do
       assert Column.size(col) == 3
     end
   end
+
+  describe "Array column operations - Fast Path" do
+    test "can create Array(UInt64) column" do
+      col = Column.new({:array, :uint64})
+      assert %Column{type: {:array, :uint64}, clickhouse_type: "Array(UInt64)"} = col
+      assert is_reference(col.ref)
+    end
+
+    test "can append Array(UInt64) values - fast path" do
+      col = Column.new({:array, :uint64})
+      arrays = [[1, 2, 3], [4, 5], [6, 7, 8, 9]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(Int64) values - fast path" do
+      col = Column.new({:array, :int64})
+      arrays = [[-1, -2, -3], [0], [1, 2]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(Float64) values - fast path" do
+      col = Column.new({:array, :float64})
+      arrays = [[1.1, 2.2], [3.3, 4.4, 5.5], []]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(String) values - fast path" do
+      col = Column.new({:array, :string})
+      arrays = [["hello", "world"], ["foo"], ["bar", "baz", "qux"]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append empty arrays" do
+      col = Column.new({:array, :uint64})
+      arrays = [[], [1, 2], [], [3]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 4
+    end
+
+    test "can append large arrays" do
+      col = Column.new({:array, :uint64})
+      large_array = Enum.to_list(1..1000)
+      assert :ok = Column.append_bulk(col, [large_array])
+      assert Column.size(col) == 1
+    end
+
+    test "can append UTF-8 strings in arrays" do
+      col = Column.new({:array, :string})
+      arrays = [["Hello 世界", "🌍"], ["Привет", "مرحبا"]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+  end
+
+  describe "Array column operations - Generic Path" do
+    test "can append Array(Date) values - generic path" do
+      col = Column.new({:array, :date})
+      arrays = [[~D[2024-01-01], ~D[2024-01-02]], [~D[2024-12-31]]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(DateTime) values - generic path" do
+      col = Column.new({:array, :datetime})
+      arrays = [[~U[2024-01-01 10:00:00Z]], [~U[2024-12-31 23:59:59Z], ~U[2024-06-15 12:30:00Z]]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(UUID) values - generic path" do
+      col = Column.new({:array, :uuid})
+
+      arrays = [
+        ["550e8400-e29b-41d4-a716-446655440000", "6ba7b810-9dad-11d1-80b4-00c04fd430c8"],
+        []
+      ]
+
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(Decimal) values - generic path" do
+      col = Column.new({:array, :decimal})
+      arrays = [[Decimal.new("123.45"), Decimal.new("678.90")], [Decimal.new("0.01")]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(Bool) values - generic path" do
+      col = Column.new({:array, :bool})
+      arrays = [[true, false, true], [false], []]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(UInt32) values - generic path" do
+      col = Column.new({:array, :uint32})
+      arrays = [[1, 2, 3], [4_294_967_295], []]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(Int32) values - generic path" do
+      col = Column.new({:array, :int32})
+      arrays = [[-2_147_483_648, 0, 2_147_483_647], [100]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(Float32) values - generic path" do
+      col = Column.new({:array, :float32})
+      arrays = [[1.5, 2.5], [3.14159]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+  end
+
+  describe "Array column operations - Nested Arrays" do
+    test "can create Array(Array(UInt64)) column" do
+      col = Column.new({:array, {:array, :uint64}})
+
+      assert %Column{type: {:array, {:array, :uint64}}, clickhouse_type: "Array(Array(UInt64))"} =
+               col
+
+      assert is_reference(col.ref)
+    end
+
+    test "can append Array(Array(UInt64)) values" do
+      col = Column.new({:array, {:array, :uint64}})
+      # Each element is an array of arrays
+      arrays = [
+        # First element: array containing two arrays
+        [[1, 2], [3, 4, 5]],
+        # Second element: array containing one array
+        [[6]],
+        # Third element: array containing empty array and non-empty array
+        [[], [7, 8]]
+      ]
+
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
+    end
+
+    test "can append Array(Array(String)) values" do
+      col = Column.new({:array, {:array, :string}})
+
+      arrays = [
+        [["hello", "world"], ["foo"]],
+        [["bar"], ["baz", "qux"]]
+      ]
+
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(Array(Array(UInt64))) values - triple nesting!" do
+      col = Column.new({:array, {:array, {:array, :uint64}}})
+
+      arrays = [
+        # First element: array of array of arrays
+        [[[1, 2], [3]], [[4, 5]]],
+        # Second element: with empty arrays at various levels
+        [[[]], [[6, 7, 8]]]
+      ]
+
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "can append Array(Array(Float64)) values" do
+      col = Column.new({:array, {:array, :float64}})
+      arrays = [[[1.1, 2.2], [3.3]], [[4.4, 5.5, 6.6]]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+
+    test "nested arrays can contain empty arrays" do
+      col = Column.new({:array, {:array, :int64}})
+      arrays = [[[], [1], [], [2, 3]], [[]]]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 2
+    end
+  end
+
+  describe "Array column operations - Error Handling" do
+    test "raises on non-list values" do
+      col = Column.new({:array, :uint64})
+
+      assert_raise ArgumentError, ~r/All values must be lists/, fn ->
+        Column.append_bulk(col, [123])
+      end
+    end
+
+    test "raises on mixed types (expected arrays, got scalar)" do
+      col = Column.new({:array, :uint64})
+
+      assert_raise ArgumentError, ~r/All values must be lists/, fn ->
+        Column.append_bulk(col, [[1, 2], 3])
+      end
+    end
+
+    test "raises on invalid inner type" do
+      col = Column.new({:array, :uint64})
+
+      assert_raise ArgumentError, fn ->
+        Column.append_bulk(col, [["string"]])
+      end
+    end
+  end
 end

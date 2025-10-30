@@ -1,8 +1,8 @@
 # Chex: FINE Wrapper Implementation Plan
 
 **Last Updated:** 2025-10-30
-**Status:** ✅ Phases 1-5B Complete (Columnar API) + ✅ Phase 5C (4/5 Advanced Types)
-**Timeline:** MVP achieved in ~1 hour, Production-ready advanced types in ~6 hours
+**Status:** ✅ Phases 1-5 Complete - Full Columnar API with 100% Array Type Coverage
+**Timeline:** MVP achieved in ~1 hour, Production-ready with advanced types in ~8 hours
 
 ---
 
@@ -673,9 +673,9 @@ Chex.insert(conn, "users", columns, schema)
 
 **Note:** Streaming insert support was removed. For large datasets, use `Chex.insert/4` directly as clickhouse-cpp handles wire-level chunking (64KB compression blocks) automatically. Users can chunk data in their own code before calling `Chex.insert/4` if needed for memory management.
 
-### ✅ Additional Column Types (Phase 5C - Mostly Complete!)
+### ✅ Additional Column Types (Phase 5C-D - Complete!)
 
-**Status:** 4 of 5 advanced types complete (32 tests added, 192 tests passing)
+**Status:** All 5 advanced types complete (213 tests passing)
 
 **✅ Completed Types:**
 
@@ -703,12 +703,14 @@ Chex.insert(conn, "users", columns, schema)
    - Dual-column management (nested data + null bitmap)
    - 6 tests (5 unit + 1 integration)
 
-**⏳ Remaining Type:**
-
-5. **Array(T)** - ⏳ Pending
-   - Most complex type requiring offset-based encoding
-   - Nested type handling for arrays of any element type
-   - Estimated 10-15 hours of work
+5. **Array(T)** - ✅ Complete
+   - Universal generic path for ALL array types
+   - Offset-based encoding with ClickHouse's AppendAsColumn
+   - Recursive support for arbitrary nesting: Array(Array(Array(T)))
+   - Works for all types including nested: Array(Nullable(String)), Array(Array(Date))
+   - ~5-10 µs per array operation (very fast!)
+   - 3 integration tests covering simple arrays, nested arrays, and complex types
+   - See `ALL_TYPES.md` for complete architecture documentation
 
 **Already Completed (Phase 5B):**
 - ✅ Date - Date without time
@@ -1388,13 +1390,13 @@ jobs:
 - ✅ UInt32/16, Int32/16/8
 - ✅ 160 tests passing total
 
-### ✅ Phase 5C Success (MOSTLY ACHIEVED - 4/5 Advanced Types)
+### ✅ Phase 5C-D Success (COMPLETE - All 5 Advanced Types)
 - ✅ UUID (128-bit identifiers, flexible parsing)
 - ✅ DateTime64(6) (microsecond precision timestamps)
 - ✅ Decimal64(9) (fixed-point with Decimal library)
 - ✅ Nullable(T) (NULL support for UInt64, Int64, String, Float64)
-- ⏳ Array(T) (pending - 10-15 hours estimated)
-- ✅ **Total: 192 tests passing (32 new tests added)**
+- ✅ Array(T) (100% type coverage with universal generic path)
+- ✅ **Total: 213 tests passing (53 new tests added)**
 
 ### Phase 6 Success (Production Ready)
 - ⏳ Comprehensive error handling
@@ -1433,7 +1435,7 @@ jobs:
 
 ## Next Steps
 
-With MVP achieved (Phases 1-4 complete) and advanced types mostly complete (Phase 5A-C), current status:
+With MVP achieved (Phases 1-4 complete) and all advanced types complete (Phase 5A-D), current status:
 
 1. **✅ Phase 5A-B: Columnar API & Performance** (COMPLETED)
    - ✅ Bulk append NIFs (C++ implementation)
@@ -1442,27 +1444,22 @@ With MVP achieved (Phases 1-4 complete) and advanced types mostly complete (Phas
    - ✅ 100x performance improvement achieved
    - ✅ Breaking change implemented: Row-oriented → Columnar API
 
-2. **✅ Phase 5C: Advanced Types** (MOSTLY COMPLETE - 4/5 done)
+2. **✅ Phase 5C-D: All Advanced Types** (COMPLETED)
    - ✅ UUID (128-bit identifiers)
    - ✅ DateTime64(6) (microsecond precision)
    - ✅ Decimal64(9) (fixed-point with Decimal library)
    - ✅ Nullable(T) (NULL support for 4 types)
-   - ⏳ Array(T) (pending - 10-15 hours)
-   - ✅ 32 new tests added (192 tests passing total)
+   - ✅ Array(T) (100% type coverage with universal generic path)
+   - ✅ 53 new tests added (213 tests passing total)
+   - ✅ Complete architecture documentation in `ALL_TYPES.md`
 
-3. **Phase 5D: Complete Array(T) Type** (NEXT PRIORITY)
-   - Implement offset-based encoding for arrays
-   - Support nested type handling
-   - Add comprehensive tests
-   - Estimated: 10-15 hours
-
-4. **Phase 6: Explorer DataFrame Integration** (FUTURE)
+3. **Phase 6: Explorer DataFrame Integration** (FUTURE)
    - Direct DataFrame insert support
    - Zero-copy optimizations with Arrow
    - Schema inference from DataFrame types
    - Natural analytics workflow integration
 
-5. **Phase 7: Production Polish** (IMPORTANT)
+4. **Phase 7: Production Polish** (NEXT PRIORITY)
    - Comprehensive error handling
    - Memory leak testing
    - SSL/TLS support

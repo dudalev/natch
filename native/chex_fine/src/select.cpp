@@ -6,6 +6,7 @@
 #include <clickhouse/columns/string.h>
 #include <clickhouse/columns/date.h>
 #include <clickhouse/columns/uuid.h>
+#include <clickhouse/columns/array.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -17,6 +18,131 @@ using namespace clickhouse;
 // Declare that Client is a FINE resource (defined in minimal.cpp)
 extern "C" {
   FINE_RESOURCE(Client);
+}
+
+// Forward declaration
+ERL_NIF_TERM column_to_elixir_list(ErlNifEnv *env, ColumnRef col);
+
+// Helper to recursively convert a column to an Elixir list
+// This handles all column types including nested arrays
+ERL_NIF_TERM column_to_elixir_list(ErlNifEnv *env, ColumnRef col) {
+  size_t count = col->Size();
+  std::vector<ERL_NIF_TERM> values;
+
+  if (auto uint64_col = col->As<ColumnUInt64>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, uint64_col->At(i)));
+    }
+  } else if (auto uint32_col = col->As<ColumnUInt32>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, uint32_col->At(i)));
+    }
+  } else if (auto uint16_col = col->As<ColumnUInt16>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, uint16_col->At(i)));
+    }
+  } else if (auto uint8_col = col->As<ColumnUInt8>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, uint8_col->At(i)));
+    }
+  } else if (auto int64_col = col->As<ColumnInt64>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_int64(env, int64_col->At(i)));
+    }
+  } else if (auto int32_col = col->As<ColumnInt32>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_int64(env, int32_col->At(i)));
+    }
+  } else if (auto int16_col = col->As<ColumnInt16>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_int64(env, int16_col->At(i)));
+    }
+  } else if (auto int8_col = col->As<ColumnInt8>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_int64(env, int8_col->At(i)));
+    }
+  } else if (auto float64_col = col->As<ColumnFloat64>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_double(env, float64_col->At(i)));
+    }
+  } else if (auto float32_col = col->As<ColumnFloat32>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_double(env, float32_col->At(i)));
+    }
+  } else if (auto string_col = col->As<ColumnString>()) {
+    for (size_t i = 0; i < count; i++) {
+      std::string_view val_view = string_col->At(i);
+      std::string val(val_view);
+      ErlNifBinary bin;
+      enif_alloc_binary(val.size(), &bin);
+      std::memcpy(bin.data, val.data(), val.size());
+      values.push_back(enif_make_binary(env, &bin));
+    }
+  } else if (auto datetime_col = col->As<ColumnDateTime>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, datetime_col->At(i)));
+    }
+  } else if (auto datetime64_col = col->As<ColumnDateTime64>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_int64(env, datetime64_col->At(i)));
+    }
+  } else if (auto date_col = col->As<ColumnDate>()) {
+    for (size_t i = 0; i < count; i++) {
+      values.push_back(enif_make_uint64(env, date_col->RawAt(i)));
+    }
+  } else if (auto uuid_col = col->As<ColumnUUID>()) {
+    for (size_t i = 0; i < count; i++) {
+      UUID uuid = uuid_col->At(i);
+      std::ostringstream oss;
+      oss << std::hex << std::setfill('0');
+      uint64_t high = uuid.first;
+      oss << std::setw(8) << ((high >> 32) & 0xFFFFFFFF) << "-";
+      oss << std::setw(4) << ((high >> 16) & 0xFFFF) << "-";
+      oss << std::setw(4) << (high & 0xFFFF) << "-";
+      uint64_t low = uuid.second;
+      oss << std::setw(4) << ((low >> 48) & 0xFFFF) << "-";
+      oss << std::setw(12) << (low & 0xFFFFFFFFFFFF);
+      std::string uuid_str = oss.str();
+      ErlNifBinary bin;
+      enif_alloc_binary(uuid_str.size(), &bin);
+      std::memcpy(bin.data, uuid_str.data(), uuid_str.size());
+      values.push_back(enif_make_binary(env, &bin));
+    }
+  } else if (auto decimal_col = col->As<ColumnDecimal>()) {
+    for (size_t i = 0; i < count; i++) {
+      Int128 value = decimal_col->At(i);
+      int64_t scaled_value = static_cast<int64_t>(value);
+      values.push_back(enif_make_int64(env, scaled_value));
+    }
+  } else if (auto array_col = col->As<ColumnArray>()) {
+    // Recursively handle nested arrays
+    for (size_t i = 0; i < count; i++) {
+      auto nested = array_col->GetAsColumn(i);
+      values.push_back(column_to_elixir_list(env, nested));
+    }
+  } else if (auto nullable_col = col->As<ColumnNullable>()) {
+    auto nested = nullable_col->Nested();
+    for (size_t i = 0; i < count; i++) {
+      if (nullable_col->IsNull(i)) {
+        values.push_back(enif_make_atom(env, "nil"));
+      } else if (auto uint64_col = nested->As<ColumnUInt64>()) {
+        values.push_back(enif_make_uint64(env, uint64_col->At(i)));
+      } else if (auto int64_col = nested->As<ColumnInt64>()) {
+        values.push_back(enif_make_int64(env, int64_col->At(i)));
+      } else if (auto string_col = nested->As<ColumnString>()) {
+        std::string_view val_view = string_col->At(i);
+        std::string val(val_view);
+        ErlNifBinary bin;
+        enif_alloc_binary(val.size(), &bin);
+        std::memcpy(bin.data, val.data(), val.size());
+        values.push_back(enif_make_binary(env, &bin));
+      } else if (auto float64_col = nested->As<ColumnFloat64>()) {
+        values.push_back(enif_make_double(env, float64_col->At(i)));
+      }
+    }
+  }
+
+  return enif_make_list_from_array(env, values.data(), values.size());
 }
 
 // Helper to convert Block to list of maps
@@ -131,6 +257,12 @@ ERL_NIF_TERM block_to_maps_impl(ErlNifEnv *env, std::shared_ptr<Block> block) {
         // Elixir will convert back to Decimal by dividing by 10^scale
         int64_t scaled_value = static_cast<int64_t>(value);
         column_values.push_back(enif_make_int64(env, scaled_value));
+      }
+    } else if (auto array_col = col->As<ColumnArray>()) {
+      // Handle array columns - recursively converts nested arrays to Elixir lists
+      for (size_t i = 0; i < row_count; i++) {
+        auto nested = array_col->GetAsColumn(i);
+        column_values.push_back(column_to_elixir_list(env, nested));
       }
     } else if (auto nullable_col = col->As<ColumnNullable>()) {
       // Handle nullable columns
