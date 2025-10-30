@@ -22,7 +22,8 @@
       "Bash(clickhouse client:*)",
       "Bash(for f in test/phase*.exs test/minimal*.exs)",
       "Bash(done)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(echo:*)"
     ],
     "deny": [],
     "ask": []
