@@ -55,8 +55,8 @@ defmodule Chex.Phase4SelectTest do
       """)
 
       schema = [id: :uint64, name: :string]
-      rows = [%{id: 1, name: "Alice"}]
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      columns = %{id: [1], name: ["Alice"]}
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query
       assert {:ok, result} = Connection.select(conn, "SELECT id, name FROM chex_test_phase4")
@@ -75,13 +75,12 @@ defmodule Chex.Phase4SelectTest do
 
       schema = [id: :uint64, name: :string]
 
-      rows = [
-        %{id: 1, name: "Alice"},
-        %{id: 2, name: "Bob"},
-        %{id: 3, name: "Charlie"}
-      ]
+      columns = %{
+        id: [1, 2, 3],
+        name: ["Alice", "Bob", "Charlie"]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query
       assert {:ok, result} = Connection.select(conn, "SELECT id, name FROM chex_test_phase4")
@@ -103,13 +102,12 @@ defmodule Chex.Phase4SelectTest do
 
       schema = [id: :uint64, name: :string]
 
-      rows = [
-        %{id: 1, name: "Alice"},
-        %{id: 2, name: "Bob"},
-        %{id: 3, name: "Charlie"}
-      ]
+      columns = %{
+        id: [1, 2, 3],
+        name: ["Alice", "Bob", "Charlie"]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query with WHERE
       assert {:ok, result} =
@@ -140,17 +138,15 @@ defmodule Chex.Phase4SelectTest do
         created_at: :datetime
       ]
 
-      rows = [
-        %{
-          id: 1,
-          value: -42,
-          name: "Test",
-          amount: 99.99,
-          created_at: ~U[2024-10-29 10:00:00Z]
-        }
-      ]
+      columns = %{
+        id: [1],
+        value: [-42],
+        name: ["Test"],
+        amount: [99.99],
+        created_at: [~U[2024-10-29 10:00:00Z]]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query
       assert {:ok, [result]} =
@@ -180,13 +176,12 @@ defmodule Chex.Phase4SelectTest do
 
       schema = [id: :uint64, name: :string]
 
-      rows = [
-        %{id: 3, name: "Charlie"},
-        %{id: 1, name: "Alice"},
-        %{id: 2, name: "Bob"}
-      ]
+      columns = %{
+        id: [3, 1, 2],
+        name: ["Charlie", "Alice", "Bob"]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query with ORDER BY
       assert {:ok, result} =
@@ -209,13 +204,12 @@ defmodule Chex.Phase4SelectTest do
 
       schema = [id: :uint64, name: :string]
 
-      rows = [
-        %{id: 1, name: "Alice"},
-        %{id: 2, name: "Bob"},
-        %{id: 3, name: "Charlie"}
-      ]
+      columns = %{
+        id: [1, 2, 3],
+        name: ["Alice", "Bob", "Charlie"]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query with LIMIT
       assert {:ok, result} = Connection.select(conn, "SELECT * FROM chex_test_phase4 LIMIT 2")
@@ -233,8 +227,8 @@ defmodule Chex.Phase4SelectTest do
       """)
 
       schema = [id: :uint64, name: :string, amount: :float64]
-      rows = [%{id: 1, name: "Alice", amount: 100.5}]
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      columns = %{id: [1], name: ["Alice"], amount: [100.5]}
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query specific columns
       assert {:ok, [result]} = Connection.select(conn, "SELECT name FROM chex_test_phase4")
@@ -254,13 +248,12 @@ defmodule Chex.Phase4SelectTest do
 
       schema = [id: :uint64, amount: :float64]
 
-      rows = [
-        %{id: 1, amount: 100.0},
-        %{id: 2, amount: 200.0},
-        %{id: 3, amount: 300.0}
-      ]
+      columns = %{
+        id: [1, 2, 3],
+        amount: [100.0, 200.0, 300.0]
+      }
 
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query with COUNT
       assert {:ok, [result]} =
@@ -285,13 +278,13 @@ defmodule Chex.Phase4SelectTest do
       """)
 
       # Insert 10k rows
-      rows =
-        for i <- 1..10_000 do
-          %{id: i, value: i * 2}
-        end
+      columns = %{
+        id: Enum.to_list(1..10_000),
+        value: Enum.map(1..10_000, &(&1 * 2))
+      }
 
       schema = [id: :uint64, value: :uint64]
-      Insert.insert(conn, "chex_test_phase4", rows, schema)
+      Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query all
       assert {:ok, result} = Connection.select(conn, "SELECT * FROM chex_test_phase4")
@@ -331,24 +324,15 @@ defmodule Chex.Phase4SelectTest do
         created_at: :datetime
       ]
 
-      insert_rows = [
-        %{
-          id: 1,
-          value: -42,
-          name: "First",
-          amount: 99.99,
-          created_at: ~U[2024-10-29 10:00:00Z]
-        },
-        %{
-          id: 2,
-          value: 123,
-          name: "Second",
-          amount: 456.78,
-          created_at: ~U[2024-10-29 11:00:00Z]
-        }
-      ]
+      columns = %{
+        id: [1, 2],
+        value: [-42, 123],
+        name: ["First", "Second"],
+        amount: [99.99, 456.78],
+        created_at: [~U[2024-10-29 10:00:00Z], ~U[2024-10-29 11:00:00Z]]
+      }
 
-      assert :ok = Insert.insert(conn, "chex_test_phase4", insert_rows, schema)
+      assert :ok = Insert.insert(conn, "chex_test_phase4", columns, schema)
 
       # Query back
       assert {:ok, select_rows} =

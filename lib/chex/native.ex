@@ -23,12 +23,22 @@ defmodule Chex.Native do
 
   # Phase 2 - Column NIFs
   def column_create(_type_name), do: :erlang.nif_error(:nif_not_loaded)
+
+  # Single-value append (deprecated, use bulk append for better performance)
   def column_uint64_append(_col, _value), do: :erlang.nif_error(:nif_not_loaded)
   def column_int64_append(_col, _value), do: :erlang.nif_error(:nif_not_loaded)
   def column_string_append(_col, _value), do: :erlang.nif_error(:nif_not_loaded)
   def column_float64_append(_col, _value), do: :erlang.nif_error(:nif_not_loaded)
   def column_datetime_append(_col, _timestamp), do: :erlang.nif_error(:nif_not_loaded)
+
   def column_size(_col), do: :erlang.nif_error(:nif_not_loaded)
+
+  # Phase 5 - Bulk Append NIFs (Performance Optimization)
+  def column_uint64_append_bulk(_col, _values), do: :erlang.nif_error(:nif_not_loaded)
+  def column_int64_append_bulk(_col, _values), do: :erlang.nif_error(:nif_not_loaded)
+  def column_string_append_bulk(_col, _values), do: :erlang.nif_error(:nif_not_loaded)
+  def column_float64_append_bulk(_col, _values), do: :erlang.nif_error(:nif_not_loaded)
+  def column_datetime_append_bulk(_col, _timestamps), do: :erlang.nif_error(:nif_not_loaded)
 
   # Phase 3 - Block NIFs
   def block_create(), do: :erlang.nif_error(:nif_not_loaded)

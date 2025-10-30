@@ -1,67 +1,83 @@
 defmodule Chex do
   @moduledoc """
-  Elixir client for ClickHouse database.
+  Elixir client for ClickHouse database using native TCP protocol.
 
   Chex provides a high-level API for interacting with ClickHouse through
-  the Rust clickhouse-rs library, offering both simple query operations
-  and high-performance streaming inserts.
+  the clickhouse-cpp library via FINE (Foreign Interface Native Extensions),
+  offering high-performance native protocol access.
 
   ## Quick Start
 
       # Start a connection
       {:ok, conn} = Chex.start_link(
-        url: "http://localhost:8123",
+        host: "localhost",
+        port: 9000,
         database: "default"
       )
 
-      # Execute a query and get all results
-      {:ok, rows} = Chex.query(conn, "SELECT * FROM users WHERE id = ?", [42])
-
-      # Stream results lazily
-      conn
-      |> Chex.stream("SELECT * FROM large_table")
-      |> Stream.take(100)
-      |> Enum.to_list()
+      # Execute DDL
+      :ok = Chex.execute(conn, "CREATE TABLE users (id UInt64, name String) ENGINE = Memory")
 
       # Insert data
-      {:ok, insert} = Chex.insert(conn, "users")
-      :ok = Chex.write(insert, %{id: 1, name: "Alice"})
-      :ok = Chex.end_insert(insert)
+      rows = [
+        %{id: 1, name: "Alice"},
+        %{id: 2, name: "Bob"}
+      ]
+      schema = [id: :uint64, name: :string]
+      :ok = Chex.insert(conn, "users", rows, schema)
 
-      # Auto-batching inserter for high throughput
-      {:ok, inserter} = Chex.inserter(conn, "events", max_rows: 10_000)
-      Enum.each(events, fn event ->
-        Chex.write_batch(inserter, event)
-        Chex.commit(inserter)
-      end)
-      Chex.end_inserter(inserter)
+      # Query data
+      {:ok, rows} = Chex.query(conn, "SELECT * FROM users ORDER BY id")
+      # => {:ok, [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]}
+
+  ## Connection Options
+
+  - `:host` - ClickHouse server host (default: "localhost")
+  - `:port` - Native TCP port (default: 9000)
+  - `:database` - Database name (default: "default")
+  - `:user` - Username (default: "default")
+  - `:password` - Password (default: "")
+  - `:compression` - Enable LZ4 compression (default: true)
+  - `:name` - Process name for registration (optional)
+
+  ## Supported Types
+
+  Currently supports 5 core ClickHouse types:
+  - `:uint64` - UInt64
+  - `:int64` - Int64
+  - `:string` - String
+  - `:float64` - Float64
+  - `:datetime` - DateTime (Unix timestamp)
+
+  More types coming in Phase 5 (Nullable, Array, Date, Bool, Decimal, etc.)
   """
 
-  alias Chex.{Connection, Native}
+  alias Chex.{Connection, Insert}
 
   @type conn :: pid() | atom()
-  @type insert :: {reference(), reference()}
-  @type inserter :: {reference(), reference()}
   @type row :: map()
+  @type schema :: [{atom(), atom()}]
 
   # Connection Management
 
   @doc """
-  Starts a new connection to ClickHouse.
+  Starts a new connection to ClickHouse via native TCP protocol.
 
   ## Options
 
-  - `:url` - ClickHouse HTTP endpoint (default: "http://localhost:8123")
+  - `:host` - ClickHouse server host (default: "localhost")
+  - `:port` - Native TCP port (default: 9000)
   - `:database` - Database name (default: "default")
-  - `:user` - Username (optional)
-  - `:password` - Password (optional)
+  - `:user` - Username (default: "default")
+  - `:password` - Password (default: "")
   - `:compression` - Enable LZ4 compression (default: true)
   - `:name` - Process name for registration (optional)
 
   ## Examples
 
-      {:ok, conn} = Chex.start_link(url: "http://localhost:8123")
+      {:ok, conn} = Chex.start_link(host: "localhost", port: 9000)
       {:ok, conn} = Chex.start_link(database: "analytics", user: "readonly")
+      {:ok, conn} = Chex.start_link(name: :my_conn)
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -70,42 +86,74 @@ defmodule Chex do
 
   @doc """
   Stops a connection.
+
+  ## Examples
+
+      :ok = Chex.stop(conn)
   """
   @spec stop(conn()) :: :ok
   def stop(conn) do
     GenServer.stop(conn)
   end
 
+  @doc """
+  Pings the ClickHouse server to check if connection is alive.
+
+  ## Examples
+
+      :ok = Chex.ping(conn)
+  """
+  @spec ping(conn()) :: :ok | {:error, term()}
+  def ping(conn) do
+    Connection.ping(conn)
+  end
+
+  @doc """
+  Resets the connection.
+
+  ## Examples
+
+      :ok = Chex.reset(conn)
+  """
+  @spec reset(conn()) :: :ok | {:error, term()}
+  def reset(conn) do
+    Connection.reset(conn)
+  end
+
   # Query Operations
 
   @doc """
-  Executes a query and returns all results as a list.
+  Executes a SELECT query and returns all results as a list of maps.
 
-  ## Parameters
-
-  - `conn` - Connection process
-  - `sql` - SQL query string (supports `?` placeholders)
-  - `params` - List of parameters to bind (default: [])
+  Column names become map keys (atoms). Results are materialized in memory.
 
   ## Examples
 
       {:ok, rows} = Chex.query(conn, "SELECT * FROM users")
-      {:ok, rows} = Chex.query(conn, "SELECT * FROM users WHERE id = ?", [42])
-      {:ok, rows} = Chex.query(conn, "SELECT * FROM users WHERE status = ? AND age > ?", ["active", 18])
+      # => {:ok, [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]}
+
+      {:ok, rows} = Chex.query(conn, "SELECT id, name FROM users WHERE id = 1")
+      # => {:ok, [%{id: 1, name: "Alice"}]}
+
+      {:ok, rows} = Chex.query(conn, "SELECT count() as cnt FROM users")
+      # => {:ok, [%{cnt: 2}]}
   """
-  @spec query(conn(), String.t(), list()) :: {:ok, [row()]} | {:error, term()}
-  def query(conn, sql, params \\ []) do
-    with {:ok, client} <- Connection.get_client(conn) do
-      Native.query_fetch_all(client, sql, params)
-    end
+  @spec query(conn(), String.t()) :: {:ok, [row()]} | {:error, term()}
+  def query(conn, sql) do
+    Connection.select(conn, sql)
   end
 
   @doc """
-  Executes a query and returns all results, raising on error.
+  Executes a SELECT query and returns all results, raising on error.
+
+  ## Examples
+
+      rows = Chex.query!(conn, "SELECT * FROM users")
+      # => [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]
   """
-  @spec query!(conn(), String.t(), list()) :: [row()]
-  def query!(conn, sql, params \\ []) do
-    case query(conn, sql, params) do
+  @spec query!(conn(), String.t()) :: [row()]
+  def query!(conn, sql) do
+    case query(conn, sql) do
       {:ok, rows} -> rows
       {:error, reason} -> raise "Query failed: #{inspect(reason)}"
     end
@@ -114,191 +162,119 @@ defmodule Chex do
   @doc """
   Executes a DDL or DML statement without returning results.
 
-  Useful for CREATE, DROP, ALTER, and DELETE statements.
+  Useful for CREATE, DROP, ALTER, INSERT, and DELETE statements.
 
   ## Examples
 
-      :ok = Chex.execute(conn, "CREATE TABLE users (id UInt32, name String) ENGINE = MergeTree() ORDER BY id")
+      :ok = Chex.execute(conn, "CREATE TABLE users (id UInt64, name String) ENGINE = Memory")
       :ok = Chex.execute(conn, "DROP TABLE users")
-      :ok = Chex.execute(conn, "DELETE FROM users WHERE id = ?", [42])
+      :ok = Chex.execute(conn, "ALTER TABLE users ADD COLUMN age UInt8")
+      :ok = Chex.execute(conn, "INSERT INTO users VALUES (1, 'Alice')")
   """
-  @spec execute(conn(), String.t(), list()) :: :ok | {:error, term()}
-  def execute(conn, sql, params \\ []) do
-    with {:ok, client} <- Connection.get_client(conn),
-         {:ok, _} <- Native.query_execute(client, sql, params) do
-      :ok
-    end
+  @spec execute(conn(), String.t()) :: :ok | {:error, term()}
+  def execute(conn, sql) do
+    Connection.execute(conn, sql)
   end
 
   @doc """
-  Returns a lazy stream of query results.
-
-  Results are fetched on-demand as the stream is consumed, allowing
-  efficient processing of large result sets.
+  Executes a DDL or DML statement, raising on error.
 
   ## Examples
 
-      conn
-      |> Chex.stream("SELECT * FROM large_table")
-      |> Stream.filter(&(&1["status"] == "active"))
-      |> Stream.map(&(&1["name"]))
-      |> Enum.take(100)
+      Chex.execute!(conn, "CREATE TABLE test (id UInt64) ENGINE = Memory")
   """
-  @spec stream(conn(), String.t(), list()) :: Enumerable.t()
-  def stream(conn, sql, params \\ []) do
-    Stream.resource(
-      fn -> {:ok, conn, sql, params} end,
-      fn
-        {:ok, conn, sql, params} ->
-          case query(conn, sql, params) do
-            {:ok, rows} -> {rows, :done}
-            {:error, _} = error -> {[error], :done}
-          end
-
-        :done ->
-          {:halt, :done}
-      end,
-      fn _ -> :ok end
-    )
+  @spec execute!(conn(), String.t()) :: :ok
+  def execute!(conn, sql) do
+    case execute(conn, sql) do
+      :ok -> :ok
+      {:error, reason} -> raise "Execute failed: #{inspect(reason)}"
+    end
   end
 
   # Insert Operations
 
   @doc """
-  Creates a new insert operation for a table.
+  Inserts data into a table using native columnar format.
 
-  Returns an insert reference that can be used with `write/2` and `end_insert/1`.
+  Chex uses **columnar format** for maximum performance (10-1000x faster than row-oriented).
+  Columns should be a map of column_name => [values].
+
+  Schema defines the column names and types.
+
+  ## Why Columnar?
+
+  - **Matches ClickHouse native storage** - no transposition needed
+  - **10-1000x faster** - 1 NIF call per column (not per value!)
+  - **Natural for analytics** - operations work on columns, not rows
+
+  ## Schema Types
+
+  Supported types:
+  - `:uint64` - UInt64
+  - `:int64` - Int64
+  - `:string` - String
+  - `:float64` - Float64
+  - `:datetime` - DateTime (pass Elixir DateTime, converts to Unix timestamp)
 
   ## Examples
 
-      {:ok, insert} = Chex.insert(conn, "users")
-      :ok = Chex.write(insert, %{id: 1, name: "Alice"})
-      :ok = Chex.write(insert, %{id: 2, name: "Bob"})
-      :ok = Chex.end_insert(insert)
+      # Columnar format (RECOMMENDED)
+      columns = %{
+        id: [1, 2, 3],
+        name: ["Alice", "Bob", "Charlie"]
+      }
+      schema = [id: :uint64, name: :string]
+      :ok = Chex.insert(conn, "users", columns, schema)
+
+      # With all types
+      columns = %{
+        id: [1, 2, 3],
+        count: [-42, 100, -5],
+        name: ["test1", "test2", "test3"],
+        amount: [99.99, 88.88, 77.77],
+        created_at: [~U[2024-10-29 10:00:00Z], ~U[2024-10-29 11:00:00Z], ~U[2024-10-29 12:00:00Z]]
+      }
+      schema = [
+        id: :uint64,
+        count: :int64,
+        name: :string,
+        amount: :float64,
+        created_at: :datetime
+      ]
+      :ok = Chex.insert(conn, "events", columns, schema)
+
+      # Bulk insert (extremely efficient!)
+      columns = %{
+        id: Enum.to_list(1..100_000),
+        value: Enum.map(1..100_000, & &1 * 2)
+      }
+      schema = [id: :uint64, value: :uint64]
+      :ok = Chex.insert(conn, "bulk_table", columns, schema)
+
+      # If you have row-oriented data, convert first:
+      rows = [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]
+      columns = Chex.Conversion.rows_to_columns(rows, schema)
+      :ok = Chex.insert(conn, "users", columns, schema)
   """
-  @spec insert(conn(), String.t()) :: {:ok, insert()} | {:error, term()}
-  def insert(conn, table) do
-    with {:ok, client} <- Connection.get_client(conn),
-         {:ok, insert_ref} <- Native.insert_new(client, table) do
-      {:ok, {client, insert_ref}}
-    end
+  @spec insert(conn(), String.t(), map(), schema()) :: :ok | {:error, term()}
+  def insert(conn, table, columns, schema) when is_map(columns) and is_list(schema) do
+    Insert.insert(conn, table, columns, schema)
   end
 
   @doc """
-  Writes a row to an insert operation.
-
-  The row should be a map with keys matching the table columns.
+  Inserts data into a table, raising on error.
 
   ## Examples
 
-      :ok = Chex.write(insert, %{id: 1, name: "Alice", age: 30})
+      columns = %{id: [1, 2], name: ["Alice", "Bob"]}
+      schema = [id: :uint64, name: :string]
+      Chex.insert!(conn, "users", columns, schema)
   """
-  @spec write(insert(), row()) :: :ok | {:error, term()}
-  def write({_client, insert_ref}, row) do
-    case Native.insert_write(insert_ref, row) do
-      {:ok, _} -> :ok
-      error -> error
-    end
-  end
-
-  @doc """
-  Finalizes an insert operation.
-
-  This must be called to ensure all buffered data is sent to ClickHouse.
-
-  ## Examples
-
-      :ok = Chex.end_insert(insert)
-  """
-  @spec end_insert(insert()) :: :ok | {:error, term()}
-  def end_insert({client, insert_ref}) do
-    case Native.insert_end(client, insert_ref) do
-      {:ok, _} -> :ok
-      error -> error
-    end
-  end
-
-  # Inserter Operations (Auto-batching)
-
-  @doc """
-  Creates a new auto-batching inserter for high-throughput scenarios.
-
-  The inserter automatically creates multiple INSERT statements based on
-  configured limits (rows, bytes, or time period).
-
-  ## Options
-
-  - `:max_rows` - Maximum rows per batch (optional)
-  - `:max_bytes` - Maximum bytes per batch (optional)
-  - `:period_ms` - Time-based batching in milliseconds (optional)
-
-  ## Examples
-
-      # Batch by row count
-      {:ok, inserter} = Chex.inserter(conn, "events", max_rows: 10_000)
-
-      # Batch by size and time
-      {:ok, inserter} = Chex.inserter(conn, "events",
-        max_bytes: 1_048_576,
-        period_ms: 5_000
-      )
-  """
-  @spec inserter(conn(), String.t(), keyword()) :: {:ok, inserter()} | {:error, term()}
-  def inserter(conn, table, opts \\ []) do
-    max_rows = Keyword.get(opts, :max_rows)
-    max_bytes = Keyword.get(opts, :max_bytes)
-    period_ms = Keyword.get(opts, :period_ms)
-
-    with {:ok, client} <- Connection.get_client(conn),
-         {:ok, inserter_ref} <- Native.inserter_new(client, table, max_rows, max_bytes, period_ms) do
-      {:ok, {client, inserter_ref}}
-    end
-  end
-
-  @doc """
-  Writes a row to an auto-batching inserter.
-
-  ## Examples
-
-      :ok = Chex.write_batch(inserter, %{id: 1, value: 100})
-  """
-  @spec write_batch(inserter(), row()) :: :ok | {:error, term()}
-  def write_batch({_client, inserter_ref}, row) do
-    case Native.inserter_write(inserter_ref, row) do
-      {:ok, _} -> :ok
-      error -> error
-    end
-  end
-
-  @doc """
-  Commits the current batch if size or time limits are reached.
-
-  Should be called periodically, typically after each `write_batch/2`.
-
-  ## Examples
-
-      :ok = Chex.commit(inserter)
-  """
-  @spec commit(inserter()) :: :ok | {:error, term()}
-  def commit({client, inserter_ref}) do
-    case Native.inserter_commit(client, inserter_ref) do
-      {:ok, _} -> :ok
-      error -> error
-    end
-  end
-
-  @doc """
-  Finalizes an inserter and ensures all pending batches are sent.
-
-  ## Examples
-
-      :ok = Chex.end_inserter(inserter)
-  """
-  @spec end_inserter(inserter()) :: :ok | {:error, term()}
-  def end_inserter({client, inserter_ref}) do
-    case Native.inserter_end(client, inserter_ref) do
-      {:ok, _} -> :ok
-      error -> error
+  @spec insert!(conn(), String.t(), map(), schema()) :: :ok
+  def insert!(conn, table, columns, schema) do
+    case insert(conn, table, columns, schema) do
+      :ok -> :ok
+      {:error, reason} -> raise "Insert failed: #{inspect(reason)}"
     end
   end
 end

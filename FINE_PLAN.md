@@ -546,79 +546,233 @@ end
 
 ---
 
-## Phase 5: Advanced Types (ESSENTIAL - Next Priority)
+## Phase 5: Columnar API & Performance Optimization (CRITICAL - In Progress)
 
-**Goal:** Expand type support to cover common use cases beyond the core 5 types
-**Status:** ⏳ Pending
-**Priority:** High - Essential for production use
+**Goal:** Redesign insert API for columnar format to match ClickHouse native storage and eliminate performance impedance mismatches
+**Status:** 🔄 In Progress
+**Priority:** CRITICAL - Current row-oriented API has 10-1000x performance penalty
 
-### Additional Column Types
+### Performance Problem Discovered
 
-1. **Nullable Columns**
-   ```cpp
-   void column_nullable_append(
-       ErlNifEnv *env,
-       fine::ResourcePtr<clickhouse::Column> col,
-       std::optional<ElixirValue> value) {
-     auto typed = std::static_pointer_cast<clickhouse::ColumnNullable>(col);
-     if (value.has_value()) {
-       // Append nested value
-     } else {
-       // Append null
-     }
-   }
-   ```
+**Current Implementation Issue:**
+The row-oriented insert API has a severe performance impedance mismatch:
 
-2. **Array Columns**
-   ```cpp
-   void column_array_append(
-       ErlNifEnv *env,
-       fine::ResourcePtr<clickhouse::Column> col,
-       std::vector<ElixirValue> values) {
-     auto typed = std::static_pointer_cast<clickhouse::ColumnArray>(col);
-     // Build nested column and append
-   }
-   ```
-
-3. **DateTime Types**
-   - DateTime, DateTime64
-   - Timezone handling
-
-4. **Decimal Types**
-   - Use Elixir Decimal library
-   - Precision/scale conversion
-
-### Compression Support
-
-```cpp
-fine::ResourcePtr<clickhouse::Client> client_create_with_compression(
-    ErlNifEnv *env,
-    std::string host,
-    int port,
-    std::string compression) {  // "lz4" or "zstd"
-
-  ClientOptions opts;
-  opts.SetHost(host);
-  opts.SetPort(port);
-
-  if (compression == "lz4") {
-    opts.SetCompressionMethod(CompressionMethod::LZ4);
-  } else if (compression == "zstd") {
-    opts.SetCompressionMethod(CompressionMethod::ZSTD);
-  }
-
-  return fine::make_resource<Client>(opts);
-}
+```elixir
+# Current API (row-oriented)
+rows = [
+  %{id: 1, name: "Alice", value: 100.0},
+  %{id: 2, name: "Bob", value: 200.0},
+  # ... 100 rows
+]
+Chex.insert(conn, "table", rows, schema)  # 100 rows × 100 columns = 10,000 NIF calls!
 ```
 
-### Connection Options
+**Performance Analysis:**
+- For N rows × M columns, current implementation makes **N × M NIF boundary crossings**
+- Each `Column.append/2` call crosses Elixir → C++ → Elixir boundary
+- 100 rows × 100 columns = **10,000 NIF calls** (!)
+- Row-to-column transposition happens in Elixir with map lookups per cell
+- Significant overhead for bulk analytics workloads
+
+**Why This Matters:**
+- ClickHouse is a **columnar database** - data stored by column, not row
+- Analytics workloads are **columnar by nature** (SUM, AVG, GROUP BY operate on columns)
+- Other high-performance tools (Arrow, Parquet, DuckDB, Polars) use columnar formats
+- Native protocol performance benefits are negated by API mismatch
+
+### Solution: Columnar-First API
+
+**New Design Principles:**
+1. **Columnar as primary API** - matches ClickHouse native storage
+2. **Bulk operations** - 1 NIF call per column (not per value)
+3. **Zero transposition** - data already in correct format
+4. **Performance-obsessed** - designed for 100k-1M rows/sec throughput
+
+**New API:**
+
+```elixir
+# Columnar format (RECOMMENDED)
+columns = %{
+  id: [1, 2, 3, 4, 5],
+  name: ["Alice", "Bob", "Charlie", "Dave", "Eve"],
+  value: [100.0, 200.0, 300.0, 400.0, 500.0],
+  timestamp: [~U[2024-01-01 10:00:00Z], ~U[2024-01-01 11:00:00Z], ...]
+}
+
+schema = [
+  id: :uint64,
+  name: :string,
+  value: :float64,
+  timestamp: :datetime
+]
+
+Chex.insert(conn, "events", columns, schema)
+# Only 4 NIF calls (1 per column) for ANY number of rows!
+```
+
+**Performance Improvement:**
+- 100 rows × 100 columns: **10,000 NIF calls → 100 NIF calls** (100x improvement)
+- Better memory locality (all values for one column together)
+- Matches ClickHouse's native columnar format
+- Vectorization opportunities in C++
+
+### Bulk Append NIFs
+
+Replace single-value appends with bulk operations:
+
+```cpp
+// Bulk append - single NIF call for entire column
+fine::Atom column_uint64_append_bulk(
+    ErlNifEnv *env,
+    fine::ResourcePtr<ColumnResource> col_res,
+    std::vector<uint64_t> values) {
+  try {
+    auto typed = std::static_pointer_cast<ColumnUInt64>(col_res->ptr);
+    for (auto value : values) {
+      typed->Append(value);
+    }
+    return fine::Atom("ok");
+  } catch (const std::exception& e) {
+    throw std::runtime_error("UInt64 bulk append failed");
+  }
+}
+FINE_NIF(column_uint64_append_bulk, 0);
+
+// Similar for: int64, string, float64, datetime
+```
+
+**FINE Advantage:** Automatically converts Elixir lists to `std::vector<T>` - zero-copy where possible.
+
+### Conversion Utilities
+
+For users with row-oriented data sources:
+
+```elixir
+# Helper module for format conversion
+defmodule Chex.Conversion do
+  def rows_to_columns(rows, schema) do
+    # Transpose row-oriented to column-oriented
+    for {name, _type} <- schema, into: %{} do
+      values = Enum.map(rows, & &1[name])
+      {name, values}
+    end
+  end
+
+  def validate_column_lengths(columns, schema) do
+    # Ensure all columns have same length
+  end
+end
+
+# Usage
+rows = [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]
+columns = Chex.Conversion.rows_to_columns(rows, schema)
+Chex.insert(conn, "users", columns, schema)
+```
+
+### Streaming Support for Large Datasets
+
+For datasets larger than memory:
+
+```elixir
+# Stream column chunks
+defmodule Chex.Insert do
+  def insert_stream(conn, table, column_stream, schema) do
+    column_stream
+    |> Stream.chunk_every(10_000)  # Batch size
+    |> Stream.each(fn columns ->
+      insert(conn, table, columns, schema)
+    end)
+    |> Stream.run()
+  end
+end
+
+# Usage
+big_columns
+|> Stream.chunk_every(10_000)
+|> Chex.Insert.insert_stream(conn, "events", schema)
+```
+
+### Additional Column Types (Phase 5B)
+
+After columnar API is stable, add more types:
+
+1. **Nullable Columns** - `Array(Nullable(T))`
+2. **Array Columns** - `Array(Array(T))`
+3. **DateTime64** - Microsecond precision with timezone
+4. **Decimal** - Fixed-point decimals
+5. **Date** - Date without time
+6. **Bool** - Boolean (ClickHouse UInt8)
+7. **UUID** - 128-bit UUID
+
+### Future: Explorer DataFrame Integration
+
+**Status:** Documented for future implementation (Phase 6+)
+
+**Rationale:**
+- Explorer is Elixir's high-performance DataFrame library
+- Already columnar format (uses Apache Arrow internally)
+- Perfect fit for analytics workloads
+- Near zero-copy potential
+
+**Proposed API:**
+
+```elixir
+# Future: Direct DataFrame support
+df = Explorer.DataFrame.new(
+  id: [1, 2, 3],
+  name: ["Alice", "Bob", "Charlie"],
+  amount: [100.5, 200.75, 300.25]
+)
+
+# Schema inference from DataFrame types
+Chex.insert(conn, "events", df)
+
+# Or explicit schema
+Chex.insert(conn, "events", df, schema: [id: :uint64, name: :string, amount: :float64])
+```
+
+**Implementation Notes:**
+- Explorer DataFrames are backed by Rust Polars
+- Can access underlying Arrow arrays for zero-copy operations
+- Need to map Explorer types to ClickHouse types
+- Binary data can be passed directly to C++ without copying
+
+**Benefits:**
+- Natural fit: Analytics → DataFrame → Columnar DB
+- Users work in DataFrames, insert to ClickHouse seamlessly
+- Potential for SIMD/vectorized operations
+- Ecosystem integration (Nx, Explorer, Kino)
+
+### Breaking Changes
+
+**API Changes:**
+- `Chex.insert/4` now expects columnar format (map of lists), not row format (list of maps)
+- `Chex.Column.append/2` removed, replaced with `append_bulk/2`
+- Single-value append NIFs removed (bulk operations only)
+
+**Migration:**
+```elixir
+# Before (Phases 1-4)
+rows = [%{id: 1, name: "Alice"}, %{id: 2, name: "Bob"}]
+Chex.insert(conn, "users", rows, schema)
+
+# After (Phase 5+)
+columns = %{id: [1, 2], name: ["Alice", "Bob"]}
+Chex.insert(conn, "users", columns, schema)
+
+# Or use conversion helper
+columns = Chex.Conversion.rows_to_columns(rows, schema)
+Chex.insert(conn, "users", columns, schema)
+```
+
+### Connection Options & Production Features
 
 Support full ClientOptions:
-- Authentication (user/password)
-- SSL/TLS
-- Compression
-- Timeouts
-- Retry logic
+- Authentication (user/password) ✅ Already supported
+- Compression (LZ4) ✅ Already supported
+- SSL/TLS - Phase 6
+- Timeouts - Phase 6
+- Retry logic - Phase 6
 
 **Note:** Connection pooling should be investigated in the clickhouse-cpp library itself. If the C++ library handles connection pooling, we should leverage that rather than implementing it at the Elixir level.
 
@@ -1252,28 +1406,36 @@ jobs:
 
 ## Next Steps
 
-With MVP achieved (Phases 1-4 complete), the priority order is:
+With MVP achieved (Phases 1-4 complete), current focus:
 
-1. **Phase 5: Advanced Types** (ESSENTIAL)
-   - Nullable columns
-   - Array columns
-   - Date types
-   - Bool type
-   - DateTime64 with timezone support
-   - Decimal types
+1. **Phase 5: Columnar API & Performance** (🔄 IN PROGRESS - CRITICAL)
+   - **Phase 5A:** Bulk append NIFs (C++ implementation)
+   - **Phase 5B:** Columnar insert API (Elixir layer)
+   - **Phase 5C:** Streaming support for large datasets
+   - **Phase 5D:** Additional types (Nullable, Array, DateTime64, Decimal, Date, Bool, UUID)
+   - Performance target: 100k-1M rows/sec for bulk inserts
+   - Breaking change: Row-oriented API → Columnar API
 
-2. **Phase 6: Production Polish** (IMPORTANT)
+2. **Phase 6: Explorer DataFrame Integration** (FUTURE)
+   - Direct DataFrame insert support
+   - Zero-copy optimizations with Arrow
+   - Schema inference from DataFrame types
+   - Natural analytics workflow integration
+
+3. **Phase 7: Production Polish** (IMPORTANT)
    - Comprehensive error handling
    - Memory leak testing
-   - Documentation
-   - CI/CD setup
+   - SSL/TLS support
+   - Timeouts and retry logic
+   - Documentation and CI/CD
 
-3. **Phase 7: Advanced Query Features** (NICE TO HAVE)
+4. **Phase 8: Advanced Query Features** (NICE TO HAVE)
    - Streaming SELECT for large result sets
    - Batch operations
+   - Async query support
 
-4. **NOT IMPLEMENTING:**
-   - ❌ Ecto Integration (Phase 8)
+5. **NOT IMPLEMENTING:**
+   - ❌ Ecto Integration (not a good fit for OLAP database)
    - ❌ Distributed Queries (removed)
 
 ---

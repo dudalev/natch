@@ -47,48 +47,82 @@ defmodule Chex.Column do
   end
 
   @doc """
-  Appends a value to the column.
+  Appends multiple values to the column in bulk (single NIF call).
 
-  The value type must match the column type.
+  This is the primary, high-performance API. Values must be a list matching
+  the column type.
 
   ## Examples
 
       col = Chex.Column.new(:uint64)
-      :ok = Chex.Column.append(col, 42)
+      :ok = Chex.Column.append_bulk(col, [1, 2, 3, 4, 5])
 
       col = Chex.Column.new(:string)
-      :ok = Chex.Column.append(col, "hello")
+      :ok = Chex.Column.append_bulk(col, ["hello", "world"])
+
+      col = Chex.Column.new(:datetime)
+      :ok = Chex.Column.append_bulk(col, [~U[2024-01-01 10:00:00Z], ~U[2024-01-01 11:00:00Z]])
   """
-  @spec append(column(), term()) :: :ok
-  def append(%__MODULE__{type: :uint64, ref: ref}, value) when is_integer(value) and value >= 0 do
-    Native.column_uint64_append(ref, value)
+  @spec append_bulk(column(), [term()]) :: :ok
+  def append_bulk(%__MODULE__{type: :uint64, ref: ref}, values) when is_list(values) do
+    # Validate all values
+    unless Enum.all?(values, &(is_integer(&1) and &1 >= 0)) do
+      raise ArgumentError, "All values must be non-negative integers for UInt64 column"
+    end
+
+    Native.column_uint64_append_bulk(ref, values)
   end
 
-  def append(%__MODULE__{type: :int64, ref: ref}, value) when is_integer(value) do
-    Native.column_int64_append(ref, value)
+  def append_bulk(%__MODULE__{type: :int64, ref: ref}, values) when is_list(values) do
+    unless Enum.all?(values, &is_integer/1) do
+      raise ArgumentError, "All values must be integers for Int64 column"
+    end
+
+    Native.column_int64_append_bulk(ref, values)
   end
 
-  def append(%__MODULE__{type: :string, ref: ref}, value) when is_binary(value) do
-    Native.column_string_append(ref, value)
+  def append_bulk(%__MODULE__{type: :string, ref: ref}, values) when is_list(values) do
+    unless Enum.all?(values, &is_binary/1) do
+      raise ArgumentError, "All values must be strings for String column"
+    end
+
+    Native.column_string_append_bulk(ref, values)
   end
 
-  def append(%__MODULE__{type: :float64, ref: ref}, value)
-      when is_float(value) or is_integer(value) do
-    Native.column_float64_append(ref, value * 1.0)
+  def append_bulk(%__MODULE__{type: :float64, ref: ref}, values) when is_list(values) do
+    unless Enum.all?(values, &(is_float(&1) or is_integer(&1))) do
+      raise ArgumentError, "All values must be numbers for Float64 column"
+    end
+
+    # Convert integers to floats
+    float_values =
+      Enum.map(values, fn
+        val when is_float(val) -> val
+        val when is_integer(val) -> val * 1.0
+      end)
+
+    Native.column_float64_append_bulk(ref, float_values)
   end
 
-  def append(%__MODULE__{type: :datetime, ref: ref}, %DateTime{} = dt) do
-    timestamp = DateTime.to_unix(dt)
-    Native.column_datetime_append(ref, timestamp)
+  def append_bulk(%__MODULE__{type: :datetime, ref: ref}, values) when is_list(values) do
+    # Convert all to Unix timestamps
+    timestamps =
+      Enum.map(values, fn
+        %DateTime{} = dt -> DateTime.to_unix(dt)
+        timestamp when is_integer(timestamp) -> timestamp
+        other -> raise ArgumentError, "Invalid datetime value: #{inspect(other)}"
+      end)
+
+    Native.column_datetime_append_bulk(ref, timestamps)
   end
 
-  def append(%__MODULE__{type: :datetime, ref: ref}, timestamp) when is_integer(timestamp) do
-    Native.column_datetime_append(ref, timestamp)
-  end
-
-  def append(%__MODULE__{type: type}, value) do
+  def append_bulk(%__MODULE__{type: type}, values) when is_list(values) do
     raise ArgumentError,
-          "Invalid value #{inspect(value)} for column type #{type}"
+          "Invalid values #{inspect(values)} for column type #{type}"
+  end
+
+  def append_bulk(%__MODULE__{}, values) do
+    raise ArgumentError, "append_bulk/2 requires a list of values, got: #{inspect(values)}"
   end
 
   @doc """

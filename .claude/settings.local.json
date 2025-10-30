@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:hexdocs.pm)",
+      "WebFetch(domain:clickhouse-driver.readthedocs.io)",
+      "WebFetch(domain:clickhouse.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(git describe:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(mix format:*)",
+      "Bash(mix deps.get:*)",
+      "Bash(mix compile:*)",
+      "Bash(mix clean:*)",
+      "Read(//Users/brendon/.asdf/installs/erlang/27.2.2/**)",
+      "Bash(mix test:*)",
+      "Bash(make:*)",
+      "Bash(iex -S mix:*)",
+      "Bash(mix run:*)",
+      "Bash(clickhouse-client:*)",
+      "Bash(clickhouse client:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

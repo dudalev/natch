@@ -46,31 +46,28 @@ defmodule Chex.Phase2TypeSystemTest do
   describe "UInt64 column operations" do
     test "can append single value" do
       col = Column.new(:uint64)
-      assert :ok = Column.append(col, 42)
+      assert :ok = Column.append_bulk(col, [42])
       assert Column.size(col) == 1
     end
 
     test "can append multiple values" do
       col = Column.new(:uint64)
-      assert :ok = Column.append(col, 1)
-      assert :ok = Column.append(col, 2)
-      assert :ok = Column.append(col, 3)
+      assert :ok = Column.append_bulk(col, [1, 2, 3])
       assert Column.size(col) == 3
     end
 
     test "can append large values" do
       col = Column.new(:uint64)
       max_uint64 = 18_446_744_073_709_551_615
-      assert :ok = Column.append(col, max_uint64)
+      assert :ok = Column.append_bulk(col, [max_uint64])
       assert Column.size(col) == 1
     end
 
     test "raises on negative values" do
       col = Column.new(:uint64)
 
-      # Negative integers don't match the guard, so we get ArgumentError from catch-all clause
-      assert_raise ArgumentError, ~r/Invalid value -1 for column type uint64/, fn ->
-        Column.append(col, -1)
+      assert_raise ArgumentError, ~r/All values must be non-negative integers/, fn ->
+        Column.append_bulk(col, [-1])
       end
     end
 
@@ -78,7 +75,7 @@ defmodule Chex.Phase2TypeSystemTest do
       col = Column.new(:uint64)
 
       assert_raise ArgumentError, fn ->
-        Column.append(col, "string")
+        Column.append_bulk(col, ["string"])
       end
     end
   end
@@ -86,26 +83,28 @@ defmodule Chex.Phase2TypeSystemTest do
   describe "Int64 column operations" do
     test "can append positive values" do
       col = Column.new(:int64)
-      assert :ok = Column.append(col, 42)
+      assert :ok = Column.append_bulk(col, [42])
       assert Column.size(col) == 1
     end
 
     test "can append negative values" do
       col = Column.new(:int64)
-      assert :ok = Column.append(col, -42)
+      assert :ok = Column.append_bulk(col, [-42])
       assert Column.size(col) == 1
     end
 
     test "can append zero" do
       col = Column.new(:int64)
-      assert :ok = Column.append(col, 0)
+      assert :ok = Column.append_bulk(col, [0])
       assert Column.size(col) == 1
     end
 
     test "can append min/max values" do
       col = Column.new(:int64)
-      assert :ok = Column.append(col, -9_223_372_036_854_775_808)
-      assert :ok = Column.append(col, 9_223_372_036_854_775_807)
+
+      assert :ok =
+               Column.append_bulk(col, [-9_223_372_036_854_775_808, 9_223_372_036_854_775_807])
+
       assert Column.size(col) == 2
     end
   end
@@ -113,33 +112,32 @@ defmodule Chex.Phase2TypeSystemTest do
   describe "String column operations" do
     test "can append single string" do
       col = Column.new(:string)
-      assert :ok = Column.append(col, "hello")
+      assert :ok = Column.append_bulk(col, ["hello"])
       assert Column.size(col) == 1
     end
 
     test "can append multiple strings" do
       col = Column.new(:string)
-      assert :ok = Column.append(col, "hello")
-      assert :ok = Column.append(col, "world")
+      assert :ok = Column.append_bulk(col, ["hello", "world"])
       assert Column.size(col) == 2
     end
 
     test "can append empty string" do
       col = Column.new(:string)
-      assert :ok = Column.append(col, "")
+      assert :ok = Column.append_bulk(col, [""])
       assert Column.size(col) == 1
     end
 
     test "can append UTF-8 strings" do
       col = Column.new(:string)
-      assert :ok = Column.append(col, "Hello 世界 🌍")
+      assert :ok = Column.append_bulk(col, ["Hello 世界 🌍"])
       assert Column.size(col) == 1
     end
 
     test "can append long strings" do
       col = Column.new(:string)
       long_string = String.duplicate("a", 10_000)
-      assert :ok = Column.append(col, long_string)
+      assert :ok = Column.append_bulk(col, [long_string])
       assert Column.size(col) == 1
     end
   end
@@ -147,32 +145,31 @@ defmodule Chex.Phase2TypeSystemTest do
   describe "Float64 column operations" do
     test "can append float values" do
       col = Column.new(:float64)
-      assert :ok = Column.append(col, 3.14159)
+      assert :ok = Column.append_bulk(col, [3.14159])
       assert Column.size(col) == 1
     end
 
     test "can append integer values (auto-converted)" do
       col = Column.new(:float64)
-      assert :ok = Column.append(col, 42)
+      assert :ok = Column.append_bulk(col, [42])
       assert Column.size(col) == 1
     end
 
     test "can append negative values" do
       col = Column.new(:float64)
-      assert :ok = Column.append(col, -123.456)
+      assert :ok = Column.append_bulk(col, [-123.456])
       assert Column.size(col) == 1
     end
 
     test "can append zero" do
       col = Column.new(:float64)
-      assert :ok = Column.append(col, 0.0)
+      assert :ok = Column.append_bulk(col, [0.0])
       assert Column.size(col) == 1
     end
 
     test "can append scientific notation" do
       col = Column.new(:float64)
-      assert :ok = Column.append(col, 1.23e10)
-      assert :ok = Column.append(col, 4.56e-5)
+      assert :ok = Column.append_bulk(col, [1.23e10, 4.56e-5])
       assert Column.size(col) == 2
     end
   end
@@ -181,27 +178,26 @@ defmodule Chex.Phase2TypeSystemTest do
     test "can append DateTime struct" do
       col = Column.new(:datetime)
       dt = ~U[2024-10-29 16:30:00Z]
-      assert :ok = Column.append(col, dt)
+      assert :ok = Column.append_bulk(col, [dt])
       assert Column.size(col) == 1
     end
 
     test "can append Unix timestamp" do
       col = Column.new(:datetime)
       timestamp = 1_730_220_600
-      assert :ok = Column.append(col, timestamp)
+      assert :ok = Column.append_bulk(col, [timestamp])
       assert Column.size(col) == 1
     end
 
     test "can append multiple DateTime values" do
       col = Column.new(:datetime)
-      assert :ok = Column.append(col, ~U[2024-01-01 00:00:00Z])
-      assert :ok = Column.append(col, ~U[2024-12-31 23:59:59Z])
+      assert :ok = Column.append_bulk(col, [~U[2024-01-01 00:00:00Z], ~U[2024-12-31 23:59:59Z]])
       assert Column.size(col) == 2
     end
 
     test "can append epoch (1970-01-01)" do
       col = Column.new(:datetime)
-      assert :ok = Column.append(col, ~U[1970-01-01 00:00:00Z])
+      assert :ok = Column.append_bulk(col, [~U[1970-01-01 00:00:00Z]])
       assert Column.size(col) == 1
     end
   end
@@ -212,13 +208,9 @@ defmodule Chex.Phase2TypeSystemTest do
       col2 = Column.new(:string)
       col3 = Column.new(:float64)
 
-      Column.append(col1, 1)
-      Column.append(col2, "first")
-      Column.append(col3, 1.1)
-
-      Column.append(col1, 2)
-      Column.append(col2, "second")
-      Column.append(col3, 2.2)
+      Column.append_bulk(col1, [1, 2])
+      Column.append_bulk(col2, ["first", "second"])
+      Column.append_bulk(col3, [1.1, 2.2])
 
       assert Column.size(col1) == 2
       assert Column.size(col2) == 2
@@ -229,8 +221,7 @@ defmodule Chex.Phase2TypeSystemTest do
       col1 = Column.new(:uint64)
       col2 = Column.new(:uint64)
 
-      Column.append(col1, 1)
-      Column.append(col1, 2)
+      Column.append_bulk(col1, [1, 2])
 
       # col2 should be empty
       assert Column.size(col1) == 2
@@ -248,13 +239,10 @@ defmodule Chex.Phase2TypeSystemTest do
       col = Column.new(:string)
       assert Column.size(col) == 0
 
-      Column.append(col, "a")
+      Column.append_bulk(col, ["a"])
       assert Column.size(col) == 1
 
-      Column.append(col, "b")
-      assert Column.size(col) == 2
-
-      Column.append(col, "c")
+      Column.append_bulk(col, ["b", "c"])
       assert Column.size(col) == 3
     end
   end
