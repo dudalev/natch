@@ -763,33 +763,33 @@ During integration testing, discovered critical bugs preventing complex nested t
 
 Created `test/nesting_integration_test.exs` with 14 full roundtrip tests:
 
-1. **Array(Nullable(T))** - Arrays with null values
+1. ✅ **Array(Nullable(T))** - Arrays with null values
    - `Array(Nullable(String))` with mixed nulls
    - `Array(Nullable(UInt64))` with all nulls
 
-2. **LowCardinality(Nullable(String))** - Dictionary encoding with nulls
+2. ✅ **LowCardinality(Nullable(String))** - Dictionary encoding with nulls
 
-3. **Tuple with Nullable elements** - `Tuple(Nullable(String), UInt64)`
+3. ✅ **Tuple with Nullable elements** - `Tuple(Nullable(String), UInt64)`
 
-4. **Map with Nullable values** - `Map(String, Nullable(UInt64))` ✓ (was crashing)
+4. ✅ **Map with Nullable values** - `Map(String, Nullable(UInt64))` (was crashing)
 
-5. **Array(LowCardinality(String))** - Dictionary encoding in arrays
+5. ✅ **Array(LowCardinality(String))** - Dictionary encoding in arrays
 
-6. **Array(LowCardinality(Nullable(String)))** - Triple wrapper type!
+6. ✅ **Array(LowCardinality(Nullable(String)))** - Triple wrapper type!
 
-7. **Map(String, Array(UInt64))** - Arrays as map values
+7. ✅ **Map(String, Array(UInt64))** - Arrays as map values
 
-8. **Map(String, Enum16)** - Enums as map values
+8. ✅ **Map(String, Enum16)** - Enums as map values
 
-9. **Tuple(String, Array(UInt64))** - Arrays in tuples
+9. ✅ **Tuple(String, Array(UInt64))** - Arrays in tuples
 
-10. **Tuple(Enum8, UInt64)** - Enums in tuples
+10. ✅ **Tuple(Enum8, UInt64)** - Enums in tuples
 
-11. **Array(Array(Nullable(UInt64)))** - Triple nesting with nulls
+11. ✅ **Array(Array(Nullable(UInt64)))** - Triple nesting with nulls
 
-12. **Array(Array(Array(UInt64)))** - Deep nesting stress test
+12. ✅ **Array(Array(Array(UInt64)))** - Deep nesting stress test
 
-13. **Array(Enum8)** - Enums in arrays
+13. ✅ **Array(Enum8)** - Enums in arrays
 
 All 14 tests pass with full INSERT→SELECT roundtrip validation.
 
@@ -1484,19 +1484,19 @@ jobs:
 - ✅ Made Nullable handling generic via Slice() and recursion
 - ✅ Added missing type handlers: Map, Tuple, Enum8, Enum16, LowCardinality in block_to_maps_impl
 - ✅ Comprehensive integration tests (14 tests) with full INSERT→SELECT roundtrip validation:
-  - Array(Nullable(String)) and Array(Nullable(UInt64))
-  - LowCardinality(Nullable(String))
-  - Tuple(Nullable(String), UInt64)
-  - Map(String, Nullable(UInt64))
-  - Array(LowCardinality(String))
-  - Array(LowCardinality(Nullable(String))) - triple wrapper!
-  - Map(String, Array(UInt64))
-  - Map(String, Enum16)
-  - Tuple(String, Array(UInt64))
-  - Tuple(Enum8, UInt64)
-  - Array(Array(Nullable(UInt64))) - triple nesting
-  - Array(Array(Array(UInt64))) - deep nesting stress test
-  - Array(Enum8)
+  - ✅ Array(Nullable(String)) and Array(Nullable(UInt64))
+  - ✅ LowCardinality(Nullable(String))
+  - ✅ Tuple(Nullable(String), UInt64)
+  - ✅ Map(String, Nullable(UInt64))
+  - ✅ Array(LowCardinality(String))
+  - ✅ Array(LowCardinality(Nullable(String))) - triple wrapper!
+  - ✅ Map(String, Array(UInt64))
+  - ✅ Map(String, Enum16)
+  - ✅ Tuple(String, Array(UInt64))
+  - ✅ Tuple(Enum8, UInt64)
+  - ✅ Array(Array(Nullable(UInt64))) - triple nesting
+  - ✅ Array(Array(Array(UInt64))) - deep nesting stress test
+  - ✅ Array(Enum8)
 - ✅ **Total: 227 tests passing (14 new integration tests added)**
 
 ### Phase 6 Success (Production Ready)
