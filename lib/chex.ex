@@ -52,7 +52,7 @@ defmodule Chex do
   More types coming in Phase 5 (Nullable, Array, Date, Bool, Decimal, etc.)
   """
 
-  alias Chex.{Connection, Insert}
+  alias Chex.Connection
 
   @type conn :: pid() | atom()
   @type row :: map()
@@ -258,7 +258,7 @@ defmodule Chex do
   """
   @spec insert(conn(), String.t(), map(), schema()) :: :ok | {:error, term()}
   def insert(conn, table, columns, schema) when is_map(columns) and is_list(schema) do
-    Insert.insert(conn, table, columns, schema)
+    GenServer.call(conn, {:insert, table, columns, schema}, :infinity)
   end
 
   @doc """

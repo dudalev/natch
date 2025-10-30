@@ -3,7 +3,7 @@ defmodule Chex.Phase3BlockInsertTest do
 
   @moduletag :phase3
 
-  alias Chex.{Insert, Native}
+  alias Chex.{Block, Native}
 
   setup do
     # Start connection
@@ -72,7 +72,7 @@ defmodule Chex.Phase3BlockInsertTest do
       schema = [id: :uint64, name: :string]
       columns = %{id: [1], name: ["Alice"]}
 
-      block = Insert.build_block(columns, schema)
+      block = Block.build_block(columns, schema)
 
       assert Native.block_row_count(block) == 1
       assert Native.block_column_count(block) == 2
@@ -87,7 +87,7 @@ defmodule Chex.Phase3BlockInsertTest do
         amount: [100.5, 200.75, 300.25]
       }
 
-      block = Insert.build_block(columns, schema)
+      block = Block.build_block(columns, schema)
 
       assert Native.block_row_count(block) == 3
       assert Native.block_column_count(block) == 3
@@ -110,7 +110,7 @@ defmodule Chex.Phase3BlockInsertTest do
         created_at: [~U[2024-10-29 10:00:00Z]]
       }
 
-      block = Insert.build_block(columns, schema)
+      block = Block.build_block(columns, schema)
 
       assert Native.block_row_count(block) == 1
       assert Native.block_column_count(block) == 5
@@ -122,7 +122,7 @@ defmodule Chex.Phase3BlockInsertTest do
 
       # Missing 'name' column
       assert_raise ArgumentError, ~r/Missing column :name/, fn ->
-        Insert.build_block(columns, schema)
+        Block.build_block(columns, schema)
       end
     end
   end
@@ -141,7 +141,7 @@ defmodule Chex.Phase3BlockInsertTest do
       schema = [id: :uint64, name: :string]
       columns = %{id: [1], name: ["Alice"]}
 
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns, schema)
     end
 
     test "can insert multiple rows", %{conn: conn} do
@@ -163,7 +163,7 @@ defmodule Chex.Phase3BlockInsertTest do
         amount: [100.5, 200.75, 300.25]
       }
 
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns, schema)
     end
 
     test "can insert with all supported types", %{conn: conn} do
@@ -195,7 +195,7 @@ defmodule Chex.Phase3BlockInsertTest do
         created_at: [~U[2024-10-29 10:00:00Z], ~U[2024-10-29 11:00:00Z]]
       }
 
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns, schema)
     end
 
     test "can insert large batch", %{conn: conn} do
@@ -215,7 +215,7 @@ defmodule Chex.Phase3BlockInsertTest do
 
       schema = [id: :uint64, value: :uint64]
 
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns, schema)
     end
 
     test "can insert with string keys in columns", %{conn: conn} do
@@ -231,14 +231,14 @@ defmodule Chex.Phase3BlockInsertTest do
       schema = [id: :uint64, name: :string]
       columns = %{"id" => [1], "name" => ["Alice"]}
 
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns, schema)
     end
 
     test "returns error for invalid table", %{conn: conn} do
       schema = [id: :uint64]
       columns = %{id: [1]}
 
-      result = Insert.insert(conn, "nonexistent_table", columns, schema)
+      result = Chex.insert(conn, "nonexistent_table", columns, schema)
       assert {:error, _reason} = result
     end
   end
@@ -250,7 +250,7 @@ defmodule Chex.Phase3BlockInsertTest do
 
       # Mismatched lengths
       assert_raise ArgumentError, ~r/Column length mismatch/, fn ->
-        Insert.build_block(columns, schema)
+        Block.build_block(columns, schema)
       end
     end
 
@@ -260,7 +260,7 @@ defmodule Chex.Phase3BlockInsertTest do
 
       # Wrong types
       assert_raise ArgumentError, fn ->
-        Insert.build_block(columns, schema)
+        Block.build_block(columns, schema)
       end
     end
 
@@ -268,7 +268,7 @@ defmodule Chex.Phase3BlockInsertTest do
       schema = [id: :uint64, name: :string]
       columns = %{"id" => [1], "name" => ["Alice"]}
 
-      block = Insert.build_block(columns, schema)
+      block = Block.build_block(columns, schema)
       assert Native.block_row_count(block) == 1
     end
   end
@@ -287,15 +287,15 @@ defmodule Chex.Phase3BlockInsertTest do
 
       # First batch
       columns1 = %{id: [1, 2], batch: [1, 1]}
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns1, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns1, schema)
 
       # Second batch
       columns2 = %{id: [3, 4], batch: [2, 2]}
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns2, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns2, schema)
 
       # Third batch
       columns3 = %{id: [5], batch: [3]}
-      assert :ok = Insert.insert(conn, "chex_test_phase3", columns3, schema)
+      assert :ok = Chex.insert(conn, "chex_test_phase3", columns3, schema)
     end
   end
 end

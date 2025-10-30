@@ -141,7 +141,7 @@ defmodule Chex.Connection do
   def handle_call({:insert, table, columns, schema}, _from, state) do
     try do
       # Build block from columnar data
-      block = Chex.Insert.build_block(columns, schema)
+      block = Chex.Block.build_block(columns, schema)
 
       # Insert block
       Native.client_insert(state.client, table, block)
