@@ -33,3 +33,7 @@ chex-*.tar
 # Benchmark results
 /bench/results*.html
 /bench/*.txt
+
+# Agents settings, editors and tools
+/.elixir-ls
+/.claude/settings.local.json
