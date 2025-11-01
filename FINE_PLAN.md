@@ -1,8 +1,8 @@
 # Chex: FINE Wrapper Implementation Plan
 
-**Last Updated:** 2025-10-30
-**Status:** ✅ Phases 1-5 Complete - Full Columnar API with Complex Type Nesting Support
-**Timeline:** MVP achieved in ~1 hour, Production-ready with advanced types and nesting in ~8 hours
+**Last Updated:** 2025-11-01
+**Status:** ✅ Phases 1-5 Complete + Phase 6 Timeout Support
+**Timeline:** MVP achieved in ~1 hour, Production-ready with advanced types, nesting, and timeout configuration in ~10 hours
 
 ---
 
@@ -864,9 +864,9 @@ Chex.insert(conn, "users", columns, schema)
 Support full ClientOptions:
 - Authentication (user/password) ✅ Already supported
 - Compression (LZ4) ✅ Already supported
-- SSL/TLS - Phase 6
-- Timeouts - Phase 6
-- Retry logic - Phase 6
+- SSL/TLS ✅ Complete (Phase 5G)
+- Timeouts ✅ Complete (Phase 6A)
+- Retry logic - Future consideration
 
 **Note:** Connection pooling should be investigated in the clickhouse-cpp library itself. If the C++ library handles connection pooling, we should leverage that rather than implementing it at the Elixir level.
 
@@ -875,8 +875,52 @@ Support full ClientOptions:
 ## Phase 6: Production Polish
 
 **Goal:** Error handling, testing, and production-readiness
-**Status:** ⏳ Pending
-**Priority:** Medium
+**Status:** 🔄 In Progress (Timeout support complete)
+**Priority:** High
+
+### ✅ Phase 6A: Socket-Level Timeout Configuration (COMPLETED)
+
+**Status:** Complete - 316 tests passing (8 integration tests added)
+
+**Implementation:**
+Added three configurable socket-level timeout options to prevent operations from hanging indefinitely:
+
+```elixir
+{:ok, conn} = Chex.Connection.start_link(
+  host: "localhost",
+  port: 9000,
+  connect_timeout: 5_000,   # TCP connection establishment (default: 5000ms)
+  recv_timeout: 60_000,     # Data receive operations (default: 0 = infinite)
+  send_timeout: 60_000      # Data send operations (default: 0 = infinite)
+)
+```
+
+**Key Features:**
+- **Three timeout types**: connect, recv, send (all in milliseconds)
+- **Conservative defaults**: Match clickhouse-cpp library (5000ms, 0ms, 0ms)
+- **Infinite by default**: recv_timeout=0 allows long-running analytical queries
+- **Consistent errors**: Timeouts raise `Chex.ConnectionError` with descriptive messages
+- **Integration tests**: 8 tests marked with `:integration` tag, excluded by default
+
+**Files Modified:**
+- `lib/chex/connection.ex`: Added timeout options to type spec, moduledoc, and build_client/1
+- `lib/chex/native.ex`: Updated client_create/10 signature (was 7 params, now 10)
+- `native/chex_fine/src/minimal.cpp`: Added 3 uint64_t timeout params and ClientOptions setters
+- `test/timeout_integration_test.exs`: Created integration test suite
+- `test/test_helper.exs`: Added `:integration` to excluded tags
+- `README.md`: Added "Timeout Configuration" section
+
+**Design Decisions:**
+- Connection-level only (not per-operation) - matches clickhouse-cpp architecture
+- Simplified naming (connect_timeout vs connection_connect_timeout) for Elixir ergonomics
+- Use milliseconds consistently (matching Elixir conventions)
+- Keep as ConnectionError (no new exception type)
+
+**Testing Strategy:**
+- Integration tests use `SELECT sleep(seconds)` to trigger recv timeout
+- Connect timeout tested with unreachable IP (TEST-NET-1: 192.0.2.1)
+- Tests verify timeouts fail within expected duration
+- All existing 316 tests remain passing
 
 ### Error Handling
 
@@ -1499,10 +1543,16 @@ jobs:
   - ✅ Array(Enum8)
 - ✅ **Total: 227 tests passing (14 new integration tests added)**
 
-### Phase 6 Success (Production Ready)
-- ⏳ Comprehensive error handling
-- ⏳ No memory leaks after 1M operations
-- ⏳ Documentation complete
+### Phase 6A Success (Timeout Configuration)
+- ✅ Socket-level timeout configuration (connect, recv, send)
+- ✅ Conservative defaults matching clickhouse-cpp
+- ✅ Integration test suite (8 tests)
+- ✅ Documentation in README and moduledoc
+- ✅ **Total: 316 tests passing (8 integration tests added)**
+
+### Phase 6B Success (Additional Production Features) - In Progress
+- ⏳ Comprehensive error handling refinement
+- ⏳ Memory leak testing
 - ⏳ CI/CD pipeline green
 
 ### Performance Targets
@@ -1536,7 +1586,7 @@ jobs:
 
 ## Next Steps
 
-With MVP achieved (Phases 1-4 complete) and all advanced types complete (Phase 5A-E), current status:
+With MVP achieved (Phases 1-4 complete), all advanced types complete (Phase 5A-F), and timeout support complete (Phase 6A), current status:
 
 1. **✅ Phase 5A-B: Columnar API & Performance** (COMPLETED)
    - ✅ Bulk append NIFs (C++ implementation)
@@ -1576,20 +1626,34 @@ With MVP achieved (Phases 1-4 complete) and all advanced types complete (Phase 5
      - Row-major format maintained for traditional use cases
      - Backward compatible via deprecated `select/2` wrapper
 
-5. **Phase 6: Explorer DataFrame Integration** (FUTURE)
+5. **✅ Phase 5G: SSL/TLS Support** (COMPLETED)
+   - ✅ OpenSSL integration with clickhouse-cpp
+   - ✅ System CA certificate support
+   - ✅ SNI (Server Name Indication) enabled
+   - ✅ ClickHouse Cloud compatibility on port 9440
+   - ✅ Comprehensive documentation in README
+
+6. **✅ Phase 6A: Socket-Level Timeout Configuration** (COMPLETED)
+   - ✅ Three timeout types: connect_timeout, recv_timeout, send_timeout
+   - ✅ Conservative defaults matching clickhouse-cpp (5000ms, 0ms, 0ms)
+   - ✅ Connection-level configuration (not per-operation)
+   - ✅ Comprehensive timeout documentation in README and moduledoc
+   - ✅ Integration test suite (8 tests, excluded by default)
+   - ✅ All 316 tests passing (8 integration tests added)
+
+7. **Phase 6B: Additional Production Features** (NEXT PRIORITY)
+   - Comprehensive error handling refinement
+   - Memory leak testing (valgrind, AddressSanitizer)
+   - CI/CD pipeline setup
+   - Performance optimization and profiling
+
+8. **Phase 7: Explorer DataFrame Integration** (FUTURE)
    - Direct DataFrame insert support
    - Zero-copy optimizations with Arrow
    - Schema inference from DataFrame types
    - Natural analytics workflow integration
 
-6. **Phase 7: Production Polish** (NEXT PRIORITY)
-   - Comprehensive error handling
-   - Memory leak testing
-   - SSL/TLS support
-   - Timeouts and retry logic
-   - Documentation and CI/CD
-
-7. **Phase 8: Advanced Query Features** (NICE TO HAVE)
+9. **Phase 8: Advanced Query Features** (NICE TO HAVE)
    - Streaming SELECT for large result sets
    - Batch operations
    - Async query support
