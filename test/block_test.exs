@@ -246,9 +246,11 @@ defmodule Chex.BlockTest do
       schema = [id: :uint64, name: :string]
       columns = %{id: [1, 2, 3], name: ["Alice", "Bob"]}
 
-      assert_raise RuntimeError, ~r/all columns in block must have same count of rows/, fn ->
-        Block.build_block(columns, schema)
-      end
+      assert_raise Chex.ValidationError,
+                   ~r/all columns in block must have same count of rows/,
+                   fn ->
+                     Block.build_block(columns, schema)
+                   end
     end
 
     test "catches missing column" do

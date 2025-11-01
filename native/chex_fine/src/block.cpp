@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <stdexcept>
+#include "error_encoding.h"
 
 using namespace clickhouse;
 
@@ -37,7 +38,7 @@ fine::ResourcePtr<BlockResource> block_create(ErlNifEnv *env) {
   try {
     return fine::make_resource<BlockResource>();
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Block creation failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(block_create, 0);
@@ -54,7 +55,7 @@ fine::Atom block_append_column(
     block_res->ptr->AppendColumn(name, col_res->ptr);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Block append column failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(block_append_column, 0);
@@ -92,7 +93,7 @@ fine::Atom client_insert(
     client->Insert(table_name, *block_res->ptr);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Insert failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(client_insert, 0);

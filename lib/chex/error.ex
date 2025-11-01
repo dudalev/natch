@@ -177,3 +177,77 @@ defmodule Chex.OpenSSLError do
     }
   end
 end
+
+# Shared error handling functions
+defmodule Chex.Error do
+  @moduledoc false
+
+  @doc """
+  Handle NIF errors by parsing JSON and raising appropriate exceptions.
+
+  Used by modules that call NIFs directly (Block, Column, etc.) to transform
+  generic RuntimeError with JSON payload into typed exceptions.
+  """
+  def handle_nif_error(exception_struct) do
+    message = Exception.message(exception_struct)
+
+    case Jason.decode(message) do
+      {:ok, %{"type" => "validation"} = error} ->
+        raise Chex.ValidationError, message: error["message"]
+
+      {:ok, %{"type" => "protocol"} = error} ->
+        raise Chex.ProtocolError, message: error["message"]
+
+      {:ok, %{"type" => "server"} = error} ->
+        raise Chex.ServerError,
+          message: error["message"],
+          code: error["code"],
+          name: error["name"],
+          stack_trace: error["stack_trace"]
+
+      {:ok, %{"type" => "connection"} = error} ->
+        raise Chex.ConnectionError,
+          message: error["message"],
+          reason: :connection_failed
+
+      {:ok, %{"type" => "compression"} = error} ->
+        raise Chex.CompressionError, message: error["message"]
+
+      {:ok, %{"type" => "unimplemented"} = error} ->
+        raise Chex.UnimplementedError, message: error["message"]
+
+      {:ok, %{"type" => "openssl"} = error} ->
+        raise Chex.OpenSSLError, message: error["message"]
+
+      {:ok, %{"type" => "unknown"} = error} ->
+        raise RuntimeError, message: error["message"]
+
+      _ ->
+        # Fallback for non-JSON errors - just raise original
+        raise exception_struct
+    end
+  end
+
+  @doc """
+  Handle GenServer callback errors by parsing JSON and returning error tuples.
+
+  Used by Connection.handle_call to return structured errors without raising.
+  """
+  def handle_callback_error(exception_struct) do
+    message = Exception.message(exception_struct)
+
+    case Jason.decode(message) do
+      {:ok, %{"type" => type} = error} when type in ["server", "validation", "protocol"] ->
+        # Return structured error with type and details
+        {:error, %{type: type, message: error["message"], details: error}}
+
+      {:ok, error} ->
+        # Other error types as simple error tuple
+        {:error, error["message"]}
+
+      _ ->
+        # Fallback for non-JSON errors
+        {:error, message}
+    end
+  end
+end

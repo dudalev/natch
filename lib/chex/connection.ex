@@ -113,13 +113,8 @@ defmodule Chex.Connection do
 
   @impl true
   def init(opts) do
-    case build_client(opts) do
-      {:ok, client} ->
-        {:ok, %{client: client, opts: opts}}
-
-      {:error, reason} ->
-        {:stop, reason}
-    end
+    {:ok, client} = build_client(opts)
+    {:ok, %{client: client, opts: opts}}
   end
 
   @impl true
@@ -198,64 +193,13 @@ defmodule Chex.Connection do
 
   # Private functions
 
-  # Parse JSON error from C++ and raise appropriate exception (for init/build_client)
+  # Delegate to shared error handling
   defp handle_error(exception_struct) do
-    message = Exception.message(exception_struct)
-
-    case Jason.decode(message) do
-      {:ok, %{"type" => "server"} = error} ->
-        raise Chex.ServerError,
-          message: error["message"],
-          code: error["code"],
-          name: error["name"],
-          stack_trace: error["stack_trace"]
-
-      {:ok, %{"type" => "connection"} = error} ->
-        raise Chex.ConnectionError,
-          message: error["message"],
-          reason: :connection_failed
-
-      {:ok, %{"type" => "validation"} = error} ->
-        raise Chex.ValidationError, message: error["message"]
-
-      {:ok, %{"type" => "protocol"} = error} ->
-        raise Chex.ProtocolError, message: error["message"]
-
-      {:ok, %{"type" => "compression"} = error} ->
-        raise Chex.CompressionError, message: error["message"]
-
-      {:ok, %{"type" => "unimplemented"} = error} ->
-        raise Chex.UnimplementedError, message: error["message"]
-
-      {:ok, %{"type" => "openssl"} = error} ->
-        raise Chex.OpenSSLError, message: error["message"]
-
-      {:ok, %{"type" => "unknown"} = error} ->
-        {:error, error["message"]}
-
-      _ ->
-        # Fallback for non-JSON errors
-        {:error, message}
-    end
+    Chex.Error.handle_nif_error(exception_struct)
   end
 
-  # Parse JSON error and return tuple (for handle_call callbacks)
   defp error_tuple(exception_struct) do
-    message = Exception.message(exception_struct)
-
-    case Jason.decode(message) do
-      {:ok, %{"type" => type} = error} when type in ["server", "validation", "protocol"] ->
-        # Return structured error with type and details
-        {:error, %{type: type, message: error["message"], details: error}}
-
-      {:ok, error} ->
-        # Other error types as simple error tuple
-        {:error, error["message"]}
-
-      _ ->
-        # Fallback for non-JSON errors
-        {:error, message}
-    end
+    Chex.Error.handle_callback_error(exception_struct)
   end
 
   defp build_client(opts) do

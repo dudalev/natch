@@ -72,6 +72,8 @@ defmodule Chex.Block do
     end
 
     block
+  rescue
+    e -> Chex.Error.handle_nif_error(e)
   end
 
   @doc """

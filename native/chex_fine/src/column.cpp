@@ -14,6 +14,7 @@
 #include <string>
 #include <memory>
 #include <stdexcept>
+#include "error_encoding.h"
 
 using namespace clickhouse;
 
@@ -39,7 +40,7 @@ fine::ResourcePtr<ColumnResource> column_create(
     }
     return fine::make_resource<ColumnResource>(col);
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Column creation failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_create, 0);
@@ -55,7 +56,7 @@ fine::Atom column_uint64_append(
     typed->Append(value);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UInt64 append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uint64_append, 0);
@@ -71,7 +72,7 @@ fine::Atom column_int64_append(
     typed->Append(value);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Int64 append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_int64_append, 0);
@@ -87,7 +88,7 @@ fine::Atom column_string_append(
     typed->Append(value);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("String append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_string_append, 0);
@@ -103,7 +104,7 @@ fine::Atom column_float64_append(
     typed->Append(value);
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Float64 append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_float64_append, 0);
@@ -119,7 +120,7 @@ fine::Atom column_datetime_append(
     typed->Append(static_cast<time_t>(timestamp));
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("DateTime append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_datetime_append, 0);
@@ -150,7 +151,7 @@ fine::Atom column_uint64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UInt64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uint64_append_bulk, 0);
@@ -167,7 +168,7 @@ fine::Atom column_int64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Int64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_int64_append_bulk, 0);
@@ -184,7 +185,7 @@ fine::Atom column_string_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("String bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_string_append_bulk, 0);
@@ -201,7 +202,7 @@ fine::Atom column_float64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Float64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_float64_append_bulk, 0);
@@ -218,7 +219,7 @@ fine::Atom column_datetime_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("DateTime bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_datetime_append_bulk, 0);
@@ -235,7 +236,7 @@ fine::Atom column_datetime64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("DateTime64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_datetime64_append_bulk, 0);
@@ -253,7 +254,7 @@ fine::Atom column_decimal_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Decimal bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_decimal_append_bulk, 0);
@@ -275,7 +276,7 @@ fine::Atom column_nullable_uint64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Nullable UInt64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_nullable_uint64_append_bulk, 0);
@@ -297,7 +298,7 @@ fine::Atom column_nullable_int64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Nullable Int64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_nullable_int64_append_bulk, 0);
@@ -319,7 +320,7 @@ fine::Atom column_nullable_string_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Nullable String bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_nullable_string_append_bulk, 0);
@@ -341,7 +342,7 @@ fine::Atom column_nullable_float64_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Nullable Float64 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_nullable_float64_append_bulk, 0);
@@ -363,7 +364,7 @@ fine::Atom column_date_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Date bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_date_append_bulk, 0);
@@ -380,7 +381,7 @@ fine::Atom column_uint8_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UInt8 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uint8_append_bulk, 0);
@@ -397,7 +398,7 @@ fine::Atom column_uint32_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UInt32 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uint32_append_bulk, 0);
@@ -414,7 +415,7 @@ fine::Atom column_uint16_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UInt16 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uint16_append_bulk, 0);
@@ -431,7 +432,7 @@ fine::Atom column_int32_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Int32 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_int32_append_bulk, 0);
@@ -448,7 +449,7 @@ fine::Atom column_int16_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Int16 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_int16_append_bulk, 0);
@@ -465,7 +466,7 @@ fine::Atom column_int8_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Int8 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_int8_append_bulk, 0);
@@ -482,7 +483,7 @@ fine::Atom column_float32_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Float32 bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_float32_append_bulk, 0);
@@ -505,7 +506,7 @@ fine::Atom column_uuid_append_bulk(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("UUID bulk append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_uuid_append_bulk, 0);
@@ -561,7 +562,7 @@ fine::Atom column_array_append_from_column(
     }
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Array generic append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_array_append_from_column, 0);
@@ -620,7 +621,7 @@ fine::Atom column_tuple_append_from_columns(
 
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Tuple append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_tuple_append_from_columns, 0);
@@ -658,7 +659,7 @@ fine::Atom column_map_append_from_array(
 
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("Map append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_map_append_from_array, 0);
@@ -690,7 +691,7 @@ fine::Atom column_lowcardinality_append_from_column(
 
     return fine::Atom("ok");
   } catch (const std::exception& e) {
-    throw std::runtime_error(std::string("LowCardinality append failed: ") + e.what());
+    throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
 FINE_NIF(column_lowcardinality_append_from_column, 0);
