@@ -11,7 +11,29 @@ defmodule Chex.Connection do
   - `:password` - Password (optional)
   - `:compression` - Enable LZ4 compression (default: true)
   - `:ssl` - Enable SSL/TLS encryption (default: false)
+  - `:connect_timeout` - Connection establishment timeout in milliseconds (default: 5000)
+  - `:recv_timeout` - Socket receive timeout in milliseconds (default: 0 = no timeout)
+  - `:send_timeout` - Socket send timeout in milliseconds (default: 0 = no timeout)
   - `:name` - Process name for registration (optional)
+
+  ## Timeout Configuration
+
+  Socket-level timeouts control how long operations can take:
+
+  - **connect_timeout**: Time to establish TCP connection (default: 5000ms)
+  - **recv_timeout**: Time to receive data from server (default: 0 = infinite)
+  - **send_timeout**: Time to send data to server (default: 0 = infinite)
+
+  **Important:** The default `recv_timeout` of 0 means queries can run indefinitely.
+  For production use, consider setting explicit timeouts:
+
+      {:ok, conn} = Chex.Connection.start_link(
+        host: "localhost",
+        recv_timeout: 60_000,  # 60 seconds
+        send_timeout: 60_000   # 60 seconds
+      )
+
+  When a timeout occurs, a `Chex.ConnectionError` is raised.
 
   ## SSL/TLS Support
 
@@ -51,6 +73,9 @@ defmodule Chex.Connection do
           | {:password, String.t()}
           | {:compression, boolean()}
           | {:ssl, boolean()}
+          | {:connect_timeout, non_neg_integer()}
+          | {:recv_timeout, non_neg_integer()}
+          | {:send_timeout, non_neg_integer()}
           | {:name, atom()}
 
   @doc """
@@ -239,6 +264,11 @@ defmodule Chex.Connection do
     compression = Keyword.get(opts, :compression, true)
     ssl = Keyword.get(opts, :ssl, false)
 
+    # Timeout options - match C++ library defaults
+    connect_timeout = Keyword.get(opts, :connect_timeout, 5000)
+    recv_timeout = Keyword.get(opts, :recv_timeout, 0)
+    send_timeout = Keyword.get(opts, :send_timeout, 0)
+
     try do
       client =
         Native.client_create(
@@ -248,7 +278,10 @@ defmodule Chex.Connection do
           user,
           password,
           compression,
-          ssl
+          ssl,
+          connect_timeout,
+          recv_timeout,
+          send_timeout
         )
 
       {:ok, client}

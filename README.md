@@ -112,6 +112,22 @@ ClickHouse Cloud requires SSL/TLS connections on port 9440:
 
 **Note:** SSL support requires clickhouse-cpp to be built with OpenSSL. If you get a `Chex.OpenSSLError` saying "Library was built with no SSL support", the C++ library needs to be rebuilt with `-DWITH_OPENSSL=ON` CMake flag. This is typically handled automatically by package managers on systems with OpenSSL development libraries installed.
 
+### Timeout Configuration
+
+Configure socket-level timeouts to prevent operations from hanging indefinitely in production:
+
+```elixir
+{:ok, conn} = Chex.Connection.start_link(
+  host: "localhost",
+  port: 9000,
+  connect_timeout: 5_000,   # Time to establish TCP connection (default: 5000ms)
+  recv_timeout: 60_000,     # Time to receive data from server (default: 0 = infinite)
+  send_timeout: 60_000      # Time to send data to server (default: 0 = infinite)
+)
+```
+
+**Important:** The default `recv_timeout` is 0 (no timeout), which allows long-running analytical queries to complete. For production use, consider setting explicit timeouts based on your workload. When a timeout occurs, a `Chex.ConnectionError` is raised.
+
 ## Benchmarks
 
 Real-world performance comparison vs Pillar (HTTP-based client) on M3 Pro, tested with 7-column schema.

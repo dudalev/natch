@@ -93,7 +93,8 @@ std::string get_optional_string(const std::string& value) {
 
 // Create a ClickHouse client with full options
 // Args: host, port, database (nil/empty for none), user (nil/empty for none),
-//       password (nil/empty for none), compression_enabled, ssl_enabled
+//       password (nil/empty for none), compression_enabled, ssl_enabled,
+//       connect_timeout_ms, recv_timeout_ms, send_timeout_ms
 // Note: FINE converts Elixir nil to empty string for string params
 fine::ResourcePtr<Client> client_create(
     ErlNifEnv *env,
@@ -103,7 +104,10 @@ fine::ResourcePtr<Client> client_create(
     std::string user,
     std::string password,
     bool compression,
-    bool ssl) {
+    bool ssl,
+    uint64_t connect_timeout,
+    uint64_t recv_timeout,
+    uint64_t send_timeout) {
   try {
     ClientOptions opts;
     opts.SetHost(host);
@@ -136,6 +140,11 @@ fine::ResourcePtr<Client> client_create(
       opts.SetSSLOptions(ssl_opts);
     }
 
+    // Set socket-level timeouts
+    opts.SetConnectionConnectTimeout(std::chrono::milliseconds(connect_timeout));
+    opts.SetConnectionRecvTimeout(std::chrono::milliseconds(recv_timeout));
+    opts.SetConnectionSendTimeout(std::chrono::milliseconds(send_timeout));
+
     return fine::make_resource<Client>(opts);
   } catch (const std::exception& e) {
     // Use generic encoder to extract rich error information
@@ -146,7 +155,7 @@ FINE_NIF(client_create, 0);
 
 // Simple client creation (for PoC compatibility)
 fine::ResourcePtr<Client> create_client(ErlNifEnv *env) {
-  return client_create(env, "localhost", 9000, "", "", "", false, false);
+  return client_create(env, "localhost", 9000, "", "", "", false, false, 5000, 0, 0);
 }
 FINE_NIF(create_client, 0);
 
