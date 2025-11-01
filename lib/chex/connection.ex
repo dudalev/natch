@@ -219,7 +219,21 @@ defmodule Chex.Connection do
 
       {:ok, client}
     rescue
-      e -> {:error, Exception.message(e)}
+      e ->
+        message = Exception.message(e)
+
+        # Try to parse structured error from C++
+        case Jason.decode(message) do
+          {:ok, %{"type" => "connection", "message" => error_message}} ->
+            raise Chex.ConnectionError, message: error_message, reason: :connection_failed
+
+          {:ok, %{"type" => _type, "message" => error_message}} ->
+            {:error, error_message}
+
+          _ ->
+            # Fallback for non-JSON errors
+            {:error, message}
+        end
     end
   end
 end
