@@ -21,6 +21,10 @@ set(ERLANG_INCLUDE_DIR "${ERLANG_ROOT_DIR}/usr/include")
 
 # Add clickhouse-cpp from external directory
 set(CLICKHOUSE_CPP_DIR "/Users/brendon/work/clickhouse-cpp")
+
+# Enable SSL support in clickhouse-cpp
+set(WITH_OPENSSL ON CACHE BOOL "Enable OpenSSL support" FORCE)
+
 add_subdirectory(${CLICKHOUSE_CPP_DIR} ${CMAKE_BINARY_DIR}/clickhouse-cpp EXCLUDE_FROM_ALL)
 
 # FINE headers - find in deps

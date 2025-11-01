@@ -35,6 +35,8 @@ Build dependencies will be compiled automatically via `elixir_make`.
 
 ## Quick Start
 
+### Local ClickHouse
+
 ```elixir
 # Start a connection
 {:ok, conn} = Chex.Connection.start_link(
@@ -92,6 +94,23 @@ IO.inspect(results)
 #      %{id: 3, user_id: 100, event_type: "click", ...}
 #    ]
 ```
+
+### ClickHouse Cloud (SSL)
+
+ClickHouse Cloud requires SSL/TLS connections on port 9440:
+
+```elixir
+{:ok, conn} = Chex.Connection.start_link(
+  host: "your-instance.clickhouse.cloud",
+  port: 9440,
+  database: "default",
+  user: "default",
+  password: "your-password",
+  ssl: true  # Enable SSL/TLS
+)
+```
+
+**Note:** SSL support requires clickhouse-cpp to be built with OpenSSL. If you get a `Chex.OpenSSLError` saying "Library was built with no SSL support", the C++ library needs to be rebuilt with `-DWITH_OPENSSL=ON` CMake flag. This is typically handled automatically by package managers on systems with OpenSSL development libraries installed.
 
 ## Benchmarks
 

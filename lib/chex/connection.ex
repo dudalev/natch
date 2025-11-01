@@ -5,12 +5,39 @@ defmodule Chex.Connection do
   ## Configuration Options
 
   - `:host` - ClickHouse server host (default: "localhost")
-  - `:port` - Native TCP port (default: 9000)
+  - `:port` - Native TCP port (default: 9000 for non-SSL, 9440 for SSL)
   - `:database` - Database name (default: "default")
   - `:user` - Username (default: "default")
   - `:password` - Password (optional)
   - `:compression` - Enable LZ4 compression (default: true)
+  - `:ssl` - Enable SSL/TLS encryption (default: false)
   - `:name` - Process name for registration (optional)
+
+  ## SSL/TLS Support
+
+  When `:ssl` is set to `true`, the connection uses TLS encryption with:
+  - System CA certificates for server verification
+  - Server Name Indication (SNI) enabled
+  - Peer certificate verification
+
+  ClickHouse Cloud requires SSL on port 9440.
+
+  ## Examples
+
+      # Local non-SSL connection
+      {:ok, conn} = Chex.Connection.start_link(
+        host: "localhost",
+        port: 9000
+      )
+
+      # ClickHouse Cloud SSL connection
+      {:ok, conn} = Chex.Connection.start_link(
+        host: "example.clickhouse.cloud",
+        port: 9440,
+        user: "default",
+        password: "your-password",
+        ssl: true
+      )
   """
 
   use GenServer
@@ -23,6 +50,7 @@ defmodule Chex.Connection do
           | {:user, String.t()}
           | {:password, String.t()}
           | {:compression, boolean()}
+          | {:ssl, boolean()}
           | {:name, atom()}
 
   @doc """
@@ -209,6 +237,7 @@ defmodule Chex.Connection do
     user = Keyword.get(opts, :user, "default")
     password = Keyword.get(opts, :password, "")
     compression = Keyword.get(opts, :compression, true)
+    ssl = Keyword.get(opts, :ssl, false)
 
     try do
       client =
@@ -218,7 +247,8 @@ defmodule Chex.Connection do
           database,
           user,
           password,
-          compression
+          compression,
+          ssl
         )
 
       {:ok, client}
