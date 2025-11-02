@@ -968,9 +968,232 @@ Added three configurable socket-level timeout options to prevent operations from
 - Zero memory leaks verified via valgrind
 
 **Remaining for Public Release:**
-- ⏳ Phase 6C: Prebuilt binaries (optional - see research/GITHUB_RELEASE_PLAN.md)
-- ⏳ Documentation polish for public consumption
+- ⏳ Phase 6C: Parameterized queries
+- ⏳ Phase 6D: Prebuilt binaries (see research/GITHUB_RELEASE_PLAN.md)
+- ⏳ Phase 6E: Documentation polish for public consumption
 - ⏳ Hex.pm publication
+
+### Phase 6C: Parameterized Queries
+
+**Goal:** Add support for parameterized queries to prevent SQL injection and enable type-safe query building
+**Status:** ⏳ Pending
+**Priority:** High - Security and usability
+
+**Problem:**
+Current API requires string concatenation for dynamic queries, which is:
+- Vulnerable to SQL injection
+- Error-prone (manual escaping)
+- Lacks type safety
+
+```elixir
+# Current - Unsafe!
+user_input = "'; DROP TABLE users; --"
+Chex.query(conn, "SELECT * FROM users WHERE name = '#{user_input}'")
+```
+
+**Solution: Leverage clickhouse-cpp Query API**
+
+The clickhouse-cpp library supports parameterized queries via `Query` class:
+
+```cpp
+// C++ example from clickhouse-cpp
+clickhouse::Query query("SELECT * FROM table WHERE id = {id:UInt64} AND name = {name:String}");
+query.OnData([](const Block& block) { /* ... */ });
+
+client->Select(query);
+```
+
+**Implementation Approach:**
+
+1. **C++ NIF for Query Building**
+```cpp
+// native/chex_fine/src/query.cpp
+#include <clickhouse/query.h>
+
+FINE_RESOURCE(clickhouse::Query);
+
+fine::ResourcePtr<clickhouse::Query> query_create(
+    ErlNifEnv *env,
+    std::string sql) {
+  return fine::make_resource<clickhouse::Query>(sql);
+}
+FINE_NIF(query_create, 0);
+
+// Bind parameters by name and type
+void query_bind_uint64(
+    ErlNifEnv *env,
+    fine::ResourcePtr<clickhouse::Query> query,
+    std::string name,
+    uint64_t value) {
+  // Note: clickhouse-cpp may use different binding syntax
+  // Need to investigate actual API
+  query->BindValue(name, value);
+}
+FINE_NIF(query_bind_uint64, 0);
+
+void query_bind_string(
+    ErlNifEnv *env,
+    fine::ResourcePtr<clickhouse::Query> query,
+    std::string name,
+    std::string value) {
+  query->BindValue(name, value);
+}
+FINE_NIF(query_bind_string, 0);
+
+// Execute parameterized query
+std::vector<fine::ResourcePtr<clickhouse::Block>> client_select_parameterized(
+    ErlNifEnv *env,
+    fine::ResourcePtr<clickhouse::Client> client,
+    fine::ResourcePtr<clickhouse::Query> query) {
+
+  std::vector<fine::ResourcePtr<clickhouse::Block>> results;
+
+  client->Select(*query, [&](const clickhouse::Block& block) {
+    auto block_copy = std::make_shared<clickhouse::Block>(block);
+    results.push_back(fine::make_resource_from_ptr(block_copy));
+  });
+
+  return results;
+}
+FINE_NIF(client_select_parameterized, 0);
+```
+
+2. **Elixir Query Builder API**
+
+```elixir
+defmodule Chex.Query do
+  @moduledoc """
+  Type-safe parameterized query builder.
+  """
+
+  defstruct [:sql, :params, :ref]
+
+  @doc """
+  Create a parameterized query.
+
+  ## Examples
+
+      iex> query = Chex.Query.new("SELECT * FROM users WHERE id = {id:UInt64}")
+      iex> query = Chex.Query.bind(query, :id, 42)
+      iex> Chex.Connection.select(conn, query)
+      {:ok, [%{"id" => 42, "name" => "Alice"}]}
+  """
+  def new(sql) when is_binary(sql) do
+    case Chex.Native.query_create(sql) do
+      {:ok, ref} ->
+        %__MODULE__{sql: sql, params: %{}, ref: ref}
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Bind a parameter to the query.
+  """
+  def bind(%__MODULE__{} = query, name, value) do
+    param_name = to_string(name)
+
+    case bind_value(query.ref, param_name, value) do
+      :ok ->
+        %{query | params: Map.put(query.params, name, value)}
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp bind_value(ref, name, value) when is_integer(value) and value >= 0 do
+    Chex.Native.query_bind_uint64(ref, name, value)
+  end
+
+  defp bind_value(ref, name, value) when is_integer(value) do
+    Chex.Native.query_bind_int64(ref, name, value)
+  end
+
+  defp bind_value(ref, name, value) when is_binary(value) do
+    Chex.Native.query_bind_string(ref, name, value)
+  end
+
+  defp bind_value(ref, name, value) when is_float(value) do
+    Chex.Native.query_bind_float64(ref, name, value)
+  end
+
+  defp bind_value(_ref, _name, value) do
+    {:error, "Unsupported parameter type: #{inspect(value)}"}
+  end
+end
+
+# Update Connection module
+defmodule Chex.Connection do
+  # ... existing code ...
+
+  @doc """
+  Execute a parameterized query.
+  """
+  def select(conn, %Chex.Query{} = query) do
+    GenServer.call(conn, {:select_parameterized, query}, :infinity)
+  end
+
+  # ... existing select/2 for string queries remains ...
+
+  def handle_call({:select_parameterized, query}, _from, state) do
+    case Chex.Native.client_select_parameterized(state.client, query.ref) do
+      {:ok, blocks} ->
+        rows = Enum.flat_map(blocks, &Chex.Native.block_to_maps/1)
+        {:reply, {:ok, rows}, state}
+      {:error, reason} ->
+        {:reply, {:error, reason}, state}
+    end
+  end
+end
+```
+
+3. **Usage Examples**
+
+```elixir
+# Safe parameterized query
+query = Chex.Query.new("SELECT * FROM users WHERE id = {id:UInt64}")
+|> Chex.Query.bind(:id, 42)
+
+{:ok, results} = Chex.Connection.select(conn, query)
+
+# Multiple parameters
+query = Chex.Query.new("""
+  SELECT * FROM events
+  WHERE user_id = {user_id:UInt64}
+  AND timestamp > {start:DateTime}
+  AND status = {status:String}
+""")
+|> Chex.Query.bind(:user_id, 123)
+|> Chex.Query.bind(:start, ~U[2024-01-01 00:00:00Z])
+|> Chex.Query.bind(:status, "active")
+
+{:ok, results} = Chex.Connection.select(conn, query)
+
+# Pipe-friendly
+~U[2024-01-01 00:00:00Z]
+|> Chex.Query.new("SELECT COUNT(*) FROM events WHERE timestamp > {ts:DateTime}")
+|> Chex.Query.bind(:ts, start_time)
+|> then(&Chex.Connection.select(conn, &1))
+```
+
+**Research Needed:**
+1. Verify clickhouse-cpp Query API syntax for parameter binding
+2. Determine if named parameters `{name:Type}` or positional `?` is supported
+3. Test parameter binding with all ClickHouse types
+4. Investigate if parameterization works with INSERT statements
+
+**Testing:**
+- SQL injection prevention tests
+- All supported parameter types
+- Multiple parameters in single query
+- Error handling for unbound parameters
+- Performance comparison vs string queries
+
+**Success Criteria:**
+- All dynamic queries use parameterized API
+- Zero SQL injection vulnerabilities
+- Type-safe parameter binding
+- Clear error messages for type mismatches
 
 ### Error Handling
 
@@ -1636,7 +1859,7 @@ jobs:
 
 ## Next Steps
 
-With MVP achieved (Phases 1-4 complete), all advanced types complete (Phase 5A-F), and timeout support complete (Phase 6A), current status:
+With MVP achieved (Phases 1-4 complete), all advanced types complete (Phase 5A-G), timeout support complete (Phase 6A), and GitHub release preparation complete (Phase 6B), current priorities:
 
 1. **✅ Phase 5A-B: Columnar API & Performance** (COMPLETED)
    - ✅ Bulk append NIFs (C++ implementation)
@@ -1699,25 +1922,50 @@ With MVP achieved (Phases 1-4 complete), all advanced types complete (Phase 5A-F
    - ✅ Package metadata for Hex.pm
    - ✅ Code cleanup and .gitignore updates
 
-8. **Phase 6C: Additional Production Features** (NEXT PRIORITY)
+8. **Phase 6C: Parameterized Queries** (NEXT PRIORITY)
+   - Support for query parameters to prevent SQL injection
+   - Bind parameter syntax (e.g., `SELECT * FROM table WHERE id = ?`)
+   - Type-safe parameter binding
+   - Integration with existing query API
+
+9. **Phase 6D: Prebuilt Binary Releases** (HIGH PRIORITY)
+   - GitHub Actions workflow for release artifacts
+   - Platform matrix: Linux (x86_64, ARM64) and macOS (x86_64, ARM64)
+   - NIF version matrix for OTP compatibility
+   - Automated artifact upload to GitHub Releases
+   - See research/GITHUB_RELEASE_PLAN.md for detailed implementation plan
+
+10. **Phase 6E: Additional Production Features**
    - Comprehensive error handling refinement
    - Performance optimization and profiling
    - Documentation polish for public consumption
-   - Prebuilt binaries (optional - see research/GITHUB_RELEASE_PLAN.md)
 
-9. **Phase 7: Explorer DataFrame Integration** (FUTURE)
+11. **Phase 7: Ecto Integration Investigation** (FUTURE - NEEDS RESEARCH)
+   - **Status:** Under consideration - partial fit at best
+   - **Scope:** Focus on query execution, not full schema/migration support
+   - **Rationale:** ClickHouse is OLAP, not OLTP. Investigate limited integration:
+     - Query builder integration for SELECT operations
+     - Type casting and result mapping
+     - Connection pooling via DBConnection
+   - **Limitations to document:**
+     - No transactions (ClickHouse doesn't support them)
+     - No schema migrations (table structures are analytics-focused)
+     - No associations/preloading (not OLTP use case)
+     - Limited changesets (bulk inserts don't fit Ecto's row model)
+   - **Decision point:** Determine if partial Ecto support provides value or creates confusion
+
+12. **Phase 8: Explorer DataFrame Integration** (FUTURE)
    - Direct DataFrame insert support
    - Zero-copy optimizations with Arrow
    - Schema inference from DataFrame types
    - Natural analytics workflow integration
 
-10. **Phase 8: Advanced Query Features** (NICE TO HAVE)
+13. **Phase 9: Advanced Query Features** (NICE TO HAVE)
    - Streaming SELECT for large result sets
    - Batch operations
    - Async query support
 
-11. **NOT IMPLEMENTING:**
-   - ❌ Ecto Integration (not a good fit for OLAP database)
+14. **NOT IMPLEMENTING:**
    - ❌ Distributed Queries (removed)
 
 ---
