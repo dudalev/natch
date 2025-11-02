@@ -170,6 +170,9 @@ jobs:
             --name clickhouse \
             -p 9000:9000 \
             -p 8123:8123 \
+            -e CLICKHOUSE_USER=default \
+            -e CLICKHOUSE_PASSWORD="" \
+            -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
             clickhouse/clickhouse-server:latest
 
       - name: Wait for ClickHouse
@@ -189,9 +192,6 @@ jobs:
         run: |
           brew install cmake openssl
           mix deps.get
-
-      - name: Compile
-        run: mix compile
 
       - name: Run tests on x86_64 macOS
         run: mix test --exclude integration
@@ -245,6 +245,9 @@ jobs:
             --name clickhouse \
             -p 9000:9000 \
             -p 8123:8123 \
+            -e CLICKHOUSE_USER=default \
+            -e CLICKHOUSE_PASSWORD="" \
+            -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
             clickhouse/clickhouse-server:latest
 
       - name: Wait for ClickHouse
@@ -264,9 +267,6 @@ jobs:
         run: |
           brew install cmake openssl
           mix deps.get
-
-      - name: Compile
-        run: mix compile
 
       - name: Run tests on ARM64 macOS
         run: mix test --exclude integration
