@@ -441,9 +441,33 @@ defmodule Natch.Column do
     Native.column_int16_append_bulk(ref, int_values)
   end
 
+  # Tuple type - transpose list of tuples and call append_tuple_columns
+  def append_bulk(%__MODULE__{type: {:tuple, element_types}} = col, values) when is_list(values) do
+    if values == [] do
+      :ok
+    else
+      # Validate all values are tuples of the correct size
+      expected_size = length(element_types)
+
+      unless Enum.all?(values, &(is_tuple(&1) and tuple_size(&1) == expected_size)) do
+        raise ArgumentError,
+              "All values must be tuples of size #{expected_size} for Tuple column, got: #{inspect(Enum.take(values, 3))}"
+      end
+
+      # Transpose list of tuples into list of column lists
+      # [{1.0, 2.0}, {3.0, 4.0}] -> [[1.0, 3.0], [2.0, 4.0]]
+      column_lists =
+        for i <- 0..(expected_size - 1) do
+          Enum.map(values, fn tuple -> elem(tuple, i) end)
+        end
+
+      append_tuple_columns(col, column_lists)
+    end
+  end
+
   def append_bulk(%__MODULE__{type: type}, values) when is_list(values) do
     raise ArgumentError,
-          "Invalid values #{inspect(values)} for column type #{type}"
+          "Invalid values #{inspect(values)} for column type #{inspect(type)}"
   end
 
   def append_bulk(%__MODULE__{}, values) do
