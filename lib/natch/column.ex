@@ -24,6 +24,7 @@ defmodule Natch.Column do
   - `:uint64` - UInt64
   - `:uint32` - UInt32
   - `:uint16` - UInt16
+  - `:uint8` - UInt8
   - `:int64` - Int64
   - `:int32` - Int32
   - `:int16` - Int16
@@ -206,6 +207,14 @@ defmodule Natch.Column do
     end
 
     Native.column_uint16_append_bulk(ref, values)
+  end
+
+  def append_bulk(%__MODULE__{type: :uint8, ref: ref}, values) when is_list(values) do
+    unless Enum.all?(values, &(is_integer(&1) and &1 >= 0 and &1 <= 255)) do
+      raise ArgumentError, "All values must be non-negative integers 0..255 for UInt8 column"
+    end
+
+    Native.column_uint8_append_bulk(ref, values)
   end
 
   def append_bulk(%__MODULE__{type: :int32, ref: ref}, values) when is_list(values) do
@@ -636,6 +645,7 @@ defmodule Natch.Column do
   defp elixir_type_to_clickhouse(:uint64), do: "UInt64"
   defp elixir_type_to_clickhouse(:uint32), do: "UInt32"
   defp elixir_type_to_clickhouse(:uint16), do: "UInt16"
+  defp elixir_type_to_clickhouse(:uint8), do: "UInt8"
   defp elixir_type_to_clickhouse(:int64), do: "Int64"
   defp elixir_type_to_clickhouse(:int32), do: "Int32"
   defp elixir_type_to_clickhouse(:int16), do: "Int16"

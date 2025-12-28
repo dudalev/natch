@@ -28,6 +28,12 @@ defmodule Natch.ColumnTest do
       assert is_reference(col.ref)
     end
 
+    test "can create UInt8 column" do
+      col = Column.new(:uint8)
+      assert %Column{type: :uint8, clickhouse_type: "UInt8"} = col
+      assert is_reference(col.ref)
+    end
+
     test "can create DateTime column" do
       col = Column.new(:datetime)
       assert %Column{type: :datetime, clickhouse_type: "DateTime"} = col
@@ -342,6 +348,56 @@ defmodule Natch.ColumnTest do
 
       assert_raise ArgumentError, ~r/All values must be non-negative integers/, fn ->
         Column.append_bulk(col, [65_536])
+      end
+    end
+  end
+
+  describe "UInt8 column operations" do
+    test "can create UInt8 column" do
+      col = Column.new(:uint8)
+      assert %Column{type: :uint8, clickhouse_type: "UInt8"} = col
+      assert is_reference(col.ref)
+    end
+
+    test "can append values in range" do
+      col = Column.new(:uint8)
+      assert :ok = Column.append_bulk(col, [0, 40, 60, 100, 255])
+      assert Column.size(col) == 5
+    end
+
+    test "can append single value" do
+      col = Column.new(:uint8)
+      assert :ok = Column.append_bulk(col, [42])
+      assert Column.size(col) == 1
+    end
+
+    test "can append boundary values" do
+      col = Column.new(:uint8)
+      assert :ok = Column.append_bulk(col, [0, 255])
+      assert Column.size(col) == 2
+    end
+
+    test "raises on negative values" do
+      col = Column.new(:uint8)
+
+      assert_raise ArgumentError, ~r/All values must be non-negative integers 0\.\.255/, fn ->
+        Column.append_bulk(col, [-1])
+      end
+    end
+
+    test "raises on out of range values" do
+      col = Column.new(:uint8)
+
+      assert_raise ArgumentError, ~r/All values must be non-negative integers 0\.\.255/, fn ->
+        Column.append_bulk(col, [256])
+      end
+    end
+
+    test "raises on non-integer values" do
+      col = Column.new(:uint8)
+
+      assert_raise ArgumentError, ~r/All values must be non-negative integers 0\.\.255/, fn ->
+        Column.append_bulk(col, ["string"])
       end
     end
   end
@@ -815,6 +871,13 @@ defmodule Natch.ColumnTest do
       arrays = [[-2_147_483_648, 0, 2_147_483_647], [100]]
       assert :ok = Column.append_bulk(col, arrays)
       assert Column.size(col) == 2
+    end
+
+    test "can append Array(UInt8) values - generic path" do
+      col = Column.new({:array, :uint8})
+      arrays = [[0, 40, 60, 255], [100], []]
+      assert :ok = Column.append_bulk(col, arrays)
+      assert Column.size(col) == 3
     end
 
     test "can append Array(Float32) values - generic path" do
