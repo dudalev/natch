@@ -714,6 +714,30 @@ defmodule Natch.ColumnTest do
       :ok = Column.append_bulk(col, [1.5, 2.5, 3.5])
       assert Column.size(col) == 3
     end
+
+    test "can create Nullable(DateTime64) column" do
+      col = Column.new({:nullable, :datetime64})
+      assert Column.size(col) == 0
+    end
+
+    test "can append values with nils to Nullable(DateTime64)" do
+      col = Column.new({:nullable, :datetime64})
+      # DateTime64 stores microsecond ticks as int64
+      :ok = Column.append_bulk(col, [1_705_315_800_000_000, nil, 1_705_315_900_000_000, nil])
+      assert Column.size(col) == 4
+    end
+
+    test "can append all nils to Nullable(DateTime64)" do
+      col = Column.new({:nullable, :datetime64})
+      :ok = Column.append_bulk(col, [nil, nil, nil])
+      assert Column.size(col) == 3
+    end
+
+    test "can append all values to Nullable(DateTime64)" do
+      col = Column.new({:nullable, :datetime64})
+      :ok = Column.append_bulk(col, [1_705_315_800_000_000, 1_705_315_900_000_000])
+      assert Column.size(col) == 2
+    end
   end
 
   describe "Mixed operations" do

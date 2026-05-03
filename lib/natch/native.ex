@@ -93,6 +93,9 @@ defmodule Natch.Native do
   def column_nullable_float64_append_bulk(_col, _values, _nulls),
     do: :erlang.nif_error(:nif_not_loaded)
 
+  def column_nullable_datetime64_append_bulk(_col, _values, _nulls),
+    do: :erlang.nif_error(:nif_not_loaded)
+
   # Phase 3 - Block NIFs
   def block_create(), do: :erlang.nif_error(:nif_not_loaded)
   def block_append_column(_block, _name, _column), do: :erlang.nif_error(:nif_not_loaded)

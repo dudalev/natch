@@ -350,9 +350,13 @@ defmodule Natch.Column do
         {actual_values, nulls} = split_nullable_values(values, 0.0)
         Native.column_nullable_float64_append_bulk(ref, actual_values, nulls)
 
+      :datetime64 ->
+        {actual_values, nulls} = split_nullable_values(values, 0)
+        Native.column_nullable_datetime64_append_bulk(ref, actual_values, nulls)
+
       other ->
         raise ArgumentError,
-              "Nullable is only supported for UInt64, Int64, String, Float64. Got: #{inspect(other)}"
+              "Nullable is only supported for UInt64, Int64, String, Float64, DateTime64. Got: #{inspect(other)}"
     end
   end
 

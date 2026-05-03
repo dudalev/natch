@@ -347,6 +347,28 @@ fine::Atom column_nullable_float64_append_bulk(
 }
 FINE_NIF(column_nullable_float64_append_bulk, 0);
 
+// Bulk append Nullable(DateTime64) values (microsecond timestamps as int64)
+fine::Atom column_nullable_datetime64_append_bulk(
+    ErlNifEnv *env,
+    fine::ResourcePtr<ColumnResource> col_res,
+    std::vector<int64_t> values,
+    std::vector<uint64_t> nulls) {
+  try {
+    auto nullable_col = std::static_pointer_cast<ColumnNullable>(col_res->ptr);
+    auto nested = nullable_col->Nested()->As<ColumnDateTime64>();
+    auto null_map = nullable_col->Nulls()->As<ColumnUInt8>();
+
+    for (size_t i = 0; i < values.size(); i++) {
+      nested->Append(values[i]);
+      null_map->Append(static_cast<uint8_t>(nulls[i]));
+    }
+    return fine::Atom("ok");
+  } catch (const std::exception& e) {
+    throw std::runtime_error(encode_clickhouse_error(e));
+  }
+}
+FINE_NIF(column_nullable_datetime64_append_bulk, 0);
+
 //
 // PHASE 5C - ADDITIONAL TYPE SUPPORT
 // Bulk append operations for Bool, Date, Float32, and additional integer types
