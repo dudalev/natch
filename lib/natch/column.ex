@@ -351,7 +351,15 @@ defmodule Natch.Column do
         Native.column_nullable_float64_append_bulk(ref, actual_values, nulls)
 
       :datetime64 ->
-        {actual_values, nulls} = split_nullable_values(values, 0)
+        converted =
+          Enum.map(values, fn
+            nil -> nil
+            %DateTime{} = dt -> DateTime.to_unix(dt, :microsecond)
+            ticks when is_integer(ticks) -> ticks
+            other -> raise ArgumentError, "Invalid nullable datetime64 value: #{inspect(other)}"
+          end)
+
+        {actual_values, nulls} = split_nullable_values(converted, 0)
         Native.column_nullable_datetime64_append_bulk(ref, actual_values, nulls)
 
       other ->

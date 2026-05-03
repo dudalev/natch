@@ -720,9 +720,16 @@ defmodule Natch.ColumnTest do
       assert Column.size(col) == 0
     end
 
-    test "can append values with nils to Nullable(DateTime64)" do
+    test "can append DateTime values with nils to Nullable(DateTime64)" do
       col = Column.new({:nullable, :datetime64})
-      # DateTime64 stores microsecond ticks as int64
+      dt1 = ~U[2024-01-15 10:30:00Z]
+      dt2 = ~U[2024-01-15 11:00:00Z]
+      :ok = Column.append_bulk(col, [dt1, nil, dt2, nil])
+      assert Column.size(col) == 4
+    end
+
+    test "can append raw int64 ticks with nils to Nullable(DateTime64)" do
+      col = Column.new({:nullable, :datetime64})
       :ok = Column.append_bulk(col, [1_705_315_800_000_000, nil, 1_705_315_900_000_000, nil])
       assert Column.size(col) == 4
     end
@@ -733,9 +740,9 @@ defmodule Natch.ColumnTest do
       assert Column.size(col) == 3
     end
 
-    test "can append all values to Nullable(DateTime64)" do
+    test "can append all DateTime values to Nullable(DateTime64)" do
       col = Column.new({:nullable, :datetime64})
-      :ok = Column.append_bulk(col, [1_705_315_800_000_000, 1_705_315_900_000_000])
+      :ok = Column.append_bulk(col, [~U[2024-01-15 10:30:00Z], ~U[2024-01-15 11:00:00Z]])
       assert Column.size(col) == 2
     end
   end
