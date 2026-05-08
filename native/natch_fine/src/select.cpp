@@ -752,7 +752,8 @@ SelectResult client_select(
   return SelectResult(enif_make_list_from_array(env, all_maps.data(), all_maps.size()));
 }
 
-FINE_NIF(client_select, 0);
+// DIRTY_JOB_IO_BOUND: blocks on socket waiting for ClickHouse to stream blocks.
+FINE_NIF(client_select, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Execute parameterized SELECT query and return list of maps
 SelectResult client_select_parameterized(
@@ -780,7 +781,7 @@ SelectResult client_select_parameterized(
   return SelectResult(enif_make_list_from_array(env, all_maps.data(), all_maps.size()));
 }
 
-FINE_NIF(client_select_parameterized, 0);
+FINE_NIF(client_select_parameterized, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Wrapper struct to return columnar map from FINE NIF
 struct ColumnarResult {
@@ -1126,7 +1127,7 @@ ColumnarResult client_select_cols(
   return ColumnarResult(columns_map);
 }
 
-FINE_NIF(client_select_cols, 0);
+FINE_NIF(client_select_cols, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Execute parameterized SELECT query and return columnar format
 ColumnarResult client_select_cols_parameterized(
@@ -1443,5 +1444,5 @@ ColumnarResult client_select_cols_parameterized(
   return ColumnarResult(columns_map);
 }
 
-FINE_NIF(client_select_cols_parameterized, 0);
+FINE_NIF(client_select_cols_parameterized, ERL_NIF_DIRTY_JOB_IO_BOUND);
 

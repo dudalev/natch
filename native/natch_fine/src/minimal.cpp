@@ -152,13 +152,14 @@ fine::ResourcePtr<Client> client_create(
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_create, 0);
+// DIRTY_JOB_IO_BOUND: TCP connect + (optional) SSL handshake to ClickHouse.
+FINE_NIF(client_create, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Simple client creation (for PoC compatibility)
 fine::ResourcePtr<Client> create_client(ErlNifEnv *env) {
   return client_create(env, "localhost", 9000, "", "", "", false, false, 5000, 0, 0);
 }
-FINE_NIF(create_client, 0);
+FINE_NIF(create_client, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Ping the ClickHouse server
 std::string client_ping(ErlNifEnv *env, fine::ResourcePtr<Client> client) {
@@ -169,13 +170,13 @@ std::string client_ping(ErlNifEnv *env, fine::ResourcePtr<Client> client) {
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_ping, 0);
+FINE_NIF(client_ping, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Alias for backwards compatibility with PoC
 std::string ping(ErlNifEnv *env, fine::ResourcePtr<Client> client) {
   return client_ping(env, client);
 }
-FINE_NIF(ping, 0);
+FINE_NIF(ping, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Execute a query (DDL/DML without results)
 // Returns :ok atom on success
@@ -190,7 +191,8 @@ fine::Atom client_execute(
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_execute, 0);
+// DIRTY_JOB_IO_BOUND: sends SQL, blocks on socket until server replies.
+FINE_NIF(client_execute, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Execute parameterized query
 // Returns :ok atom on success
@@ -205,7 +207,7 @@ fine::Atom client_execute_parameterized(
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_execute_parameterized, 0);
+FINE_NIF(client_execute_parameterized, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Reset connection
 // Returns :ok atom on success
@@ -217,7 +219,7 @@ fine::Atom client_reset_connection(ErlNifEnv *env, fine::ResourcePtr<Client> cli
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_reset_connection, 0);
+FINE_NIF(client_reset_connection, ERL_NIF_DIRTY_JOB_IO_BOUND);
 
 // Initialize the NIF module
 FINE_INIT("Elixir.Natch.Native");

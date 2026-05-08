@@ -77,7 +77,12 @@ namespace clickhouse {
   class Client;
 }
 
-// Insert a block into a table
+// Insert a block into a table.
+// Marked DIRTY_JOB_IO_BOUND because it does blocking network I/O to ClickHouse
+// (the C++ client serialises the block and waits for the server reply on the
+// socket). Without the flag, a slow insert hogs a normal scheduler thread for
+// its full duration — observed at 22-61s in production when ClickHouse-side
+// TTL moves to remote object storage trigger inside the insert path.
 fine::Atom client_insert(
     ErlNifEnv *env,
     fine::ResourcePtr<Client> client,
@@ -91,4 +96,4 @@ fine::Atom client_insert(
     throw std::runtime_error(encode_clickhouse_error(e));
   }
 }
-FINE_NIF(client_insert, 0);
+FINE_NIF(client_insert, ERL_NIF_DIRTY_JOB_IO_BOUND);
